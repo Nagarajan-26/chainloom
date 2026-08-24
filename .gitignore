@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+
+# Snowflake / credentials
+connections.toml
+*.pem
+*.key
+
+# Local data
+*.csv
+*.parquet
+*.jsonl
+
+# Logs
+*.log
+
+# Temporary
+tmp/
+temp/
