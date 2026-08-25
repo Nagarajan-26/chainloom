@@ -61,7 +61,7 @@ A controlled synthetic disruption centered on Supplier S017 demonstrates:
 ```text
 S017
  ↓
-Delayed supply receipts
+Delayed purchase-order commitments / supply receipts
  ↓
 P104 availability
  ↓
@@ -91,32 +91,12 @@ chainloom/
     └── ARCHITECTURE.md
 ```
 
-Implementation directories will be added when their corresponding build phases begin.
-
-## Architecture
-
-```text
-User
- ↓
-ChainLoom application
- ├── Governed Analytics → Cortex Analyst
- └── Investigation → Cortex Agent
-             ↓
-      Snowflake Semantic View
-             ↓
-        Curated Data
-             ↓
-     Synthetic Supply Chain
-```
-
-The Semantic View is the governed business contract for entities, relationships, dimensions, facts, metrics and verified questions.
-
 ## Current status
 
-**Architecture approved.**
+**Architecture hardened after independent CoCo review.**
 
 Next stages:
-1. Snowflake foundation
+1. Physical data model
 2. Synthetic data
 3. Curated layer
 4. Semantic View
@@ -129,7 +109,7 @@ Next stages:
 
 - Correctness over feature count.
 - Current Snowflake capabilities.
-- Explicit business definitions.
+- Explicit business definitions and grain.
 - Deterministic synthetic scenarios.
 - Evidence over unsupported AI claims.
 - Small, testable increments.

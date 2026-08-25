@@ -1,49 +1,23 @@
 # ChainLoom — System Architecture
 
-**Status:** Architecture Approved  
-**Version:** 1.0  
-**Problem Statement:** Supply Chain Ontology and Governed Conversational Analytics  
+**Status:** Architecture Approved / Model Hardened
+**Version:** 1.1
+**Problem Statement:** Supply Chain Ontology and Governed Conversational Analytics
 **Architecture Target:** Snowflake 2026 platform
 
 ## 1. Architecture Objective
 
-ChainLoom is a Snowflake-native governed supply-chain intelligence application providing:
-1. Governed natural-language analytics.
-2. A shared supply-chain ontology.
-3. Consistent business metrics.
-4. Multi-step investigation.
-5. Relationship-aware impact analysis.
-6. Evidence and provenance.
-7. Repeatable evaluation.
-8. A polished product experience.
-
-The architecture separates physical data, curated business data, semantic meaning, AI orchestration and product presentation.
+ChainLoom is a Snowflake-native governed supply-chain intelligence application providing governed analytics, a shared ontology, consistent metrics, investigation, impact analysis, evidence and evaluation.
 
 ## 2. Architecture Principles
 
-### 2.1 Snowflake is the system of record
-Supply-chain data, semantic definitions, metrics, AI objects and evaluation artifacts should remain within Snowflake wherever practical.
-
-### 2.2 The Semantic View is the governed business contract
-It defines logical tables, relationships, dimensions, facts, metrics, descriptions, useful synonyms/instructions and verified queries.
-
-### 2.3 Physical data and semantic data are different layers
-
-```text
-Physical Model
-→ Curated Business Model
-→ Semantic View
-→ AI
-```
-
-### 2.4 Facts retain explicit grain
-Every fact has explicit grain. Cross-fact metrics must not be calculated by blindly joining raw fact tables.
-
-### 2.5 AI must not invent business definitions
-Business metrics and relationships are deterministic. AI interprets questions and explains results; it does not invent metric formulas, evidence, relationships or data values.
-
-### 2.6 Investigation is evidence-driven
-ChainLoom distinguishes observed fact, derived metric, analytical conclusion and potential risk.
+1. Snowflake is the system of record.
+2. The Semantic View is the governed business contract.
+3. Physical data and semantic data are separate layers.
+4. Every fact has explicit grain.
+5. AI does not invent business definitions.
+6. Investigation is evidence-driven.
+7. Unsupported causal claims are prohibited.
 
 ## 3. High-Level Architecture
 
@@ -91,21 +65,14 @@ ChainLoom distinguishes observed fact, derived metric, analytical conclusion and
 ## 4. User Interaction Modes
 
 ### Governed Analytics
-For direct metric, filtering, comparison and dimensional questions.
+Direct metric, filtering, comparison and dimensional questions.
 
 ### Investigation
-For multi-step questions requiring relationship traversal, impact analysis and evidence assembly.
+Multi-step questions requiring relationship traversal, impact analysis and evidence assembly.
 
 ## 5. Cortex Analyst Role
 
-Cortex Analyst handles governed structured-data analytics over the ChainLoom Semantic View:
-- Natural-language analytical queries
-- Metric queries
-- Dimensional analysis
-- Filtering
-- Comparisons
-- Aggregations
-- Verified-question workflows
+Cortex Analyst handles governed structured-data analytics over the ChainLoom Semantic View.
 
 The Semantic View remains authoritative for metric definitions, relationships and business terminology.
 
@@ -125,19 +92,23 @@ User question
 → Grounded response
 ```
 
-Simple questions should use the simpler governed analytical path where practical.
+## 7. Current Semantic View Design Requirements
 
-## 7. Current Cortex Agent / Semantic View Architecture
+Current Snowflake Semantic Views support explicit relationships, bridge-table modeling for many-to-many concepts, role-playing logical tables, semi-additive metrics through `NON ADDITIVE BY`, derived metrics, and relationship selection for metrics when multiple paths exist. Relationship-path selection is currently Preview.
 
-The implementation must follow current Snowflake behavior.
+Verified queries can be embedded in semantic views to improve Cortex Analyst accuracy and trustworthiness.
 
-Cortex Agents can use Semantic Views as structured-data tools. Current behavior has evolved from older patterns, so application code must not assume an Agent invocation necessarily delegates SQL generation to a separate Cortex Analyst service.
+ChainLoom will:
+- Define only relationships required by supported question patterns.
+- Use bridge tables for many-to-many concepts.
+- Treat inventory as semi-additive.
+- Use explicit metric relationship paths where appropriate.
+- Add verified queries after the semantic model is stable.
 
-Use current Agent response structures and current Snowflake documentation when implementing.
-
-## 8. Data Architecture
+## 8. Physical Data Architecture
 
 ### Dimensions
+
 ```text
 DIM_DATE
 DIM_SUPPLIER
@@ -149,22 +120,64 @@ DIM_CARRIER
 ```
 
 ### Bridges
+
 ```text
 BRIDGE_SUPPLIER_PART
 BRIDGE_PRODUCT_PART
 ```
 
-### Facts
+### Procurement / supply
+
 ```text
+FACT_PURCHASE_ORDER_LINE
 FACT_SUPPLY_RECEIPT
+```
+
+### Manufacturing
+
+```text
 FACT_INVENTORY
 FACT_PRODUCTION
-FACT_ORDER_LINE
-FACT_SHIPMENT
 FACT_QUALITY
 ```
 
-## 9. Data Layering
+### Demand / fulfillment
+
+```text
+FACT_ORDER_LINE
+FACT_SHIPMENT
+```
+
+**Total: 16 physical tables.**
+
+## 9. Fact Grain Contract
+
+```text
+FACT_PURCHASE_ORDER_LINE
+= one row per PO line
+
+FACT_SUPPLY_RECEIPT
+= one row per receipt event / receipt line
+
+FACT_INVENTORY
+= one row per Part × Plant × Snapshot Date
+
+FACT_PRODUCTION
+= one row per Plant × Product × Production Date
+
+FACT_ORDER_LINE
+= one row per customer order line
+
+FACT_SHIPMENT
+= one row per shipment event
+
+FACT_QUALITY
+= one row per Supplier × Part × Plant inspection event
+```
+
+These grains are part of the ChainLoom data contract.
+
+## 10. Data Layering
 
 ```text
 SOURCE / SYNTHETIC
@@ -178,13 +191,7 @@ SEMANTIC
 AI / APPLICATION
 ```
 
-RAW contains generated source-like data.
-
-CURATED contains validated business data and deterministic transformations.
-
-SEMANTIC contains Snowflake Semantic Views with entities, relationships, facts, dimensions, metrics, instructions and verified queries.
-
-## 10. Proposed Snowflake Database Structure
+## 11. Proposed Database Structure
 
 ```text
 CHAINLOOM
@@ -196,16 +203,17 @@ CHAINLOOM
 └── APP
 ```
 
-Exact physical schema names may be adjusted if account permissions or platform constraints require it.
+Only schemas needed by the current phase will be created.
 
-## 11. Semantic View Boundary
+## 12. Semantic View Boundary
 
-Initial business-facing concepts:
+Initial business concepts:
 - Supplier
 - Part
 - Product
 - Plant
 - Inventory
+- Purchase Order Line
 - Supply Receipt
 - Customer
 - Order
@@ -225,105 +233,113 @@ Governed metrics:
 - Confirmed Impacted Customer Count
 - At-Risk Customer Count
 
-## 12. Relationship Strategy
+## 13. Relationship Strategy
 
 ```text
+Supplier → Purchase Order Line
 Supplier → Supply Receipt
 Supplier → Supplier-Part
+Purchase Order Line → Supply Receipt
 Part → Supply Receipt
 Part → Product-Part
 Product → Product-Part
+Product → Production
 Product → Order Line
+Plant → Purchase Order Line
+Plant → Supply Receipt
 Plant → Inventory
 Plant → Production
 Plant → Order Line
+Plant → Quality
 Customer → Order Line
 Order Line → Shipment
 Carrier → Shipment
 ```
 
-Many-to-many relationships use explicit bridge entities.
+The semantic layer must not expose unrestricted fact-to-fact traversal as a universal join graph.
 
-## 13. Supplier Attribution
+## 14. Supplier Attribution
 
-Supplier capability:
-```text
-Supplier
-→ BRIDGE_SUPPLIER_PART
-→ Part
-```
+Capability:
+Supplier → Supplier-Part → Part
+
+Commitment:
+Supplier → PO Line → Part → Plant
 
 Actual supply:
-```text
-Supplier
-→ FACT_SUPPLY_RECEIPT
-→ Part
-→ Plant
-```
+Supplier → Supply Receipt → Part → Plant
 
-Supplier-Part capability must never be treated as proof of downstream causality.
+Downstream operational dependency:
+Supplier → Supply / Inventory → Product → Order → Shipment → Customer
 
-## 14. Metric Computation Architecture
+The MVP has no lot-level genealogy and therefore does not claim exact receipt-to-shipment causality.
 
-Metrics are calculated at natural grain.
+## 15. Metric Computation Architecture
 
 ```text
-FACT_SHIPMENT
-      ↓
+SHIPMENT
+   ↓
 Shipment-grain aggregation
-      ↓
+   ↓
 OTD / Late Shipment Count
 ```
 
 ```text
-FACT_SUPPLY_RECEIPT
-      ↓
-Receipt-grain aggregation
-      ↓
-Supplier Inbound OTD
+PO LINE + SUPPLY RECEIPT
+   ↓
+Commitment vs actual receipt
+   ↓
+Supplier Inbound OTD / Realized Lead Time
 ```
 
 ```text
-FACT_INVENTORY + Demand History
-      ↓
+INVENTORY + DEMAND
+   ↓
 Part × Plant × Date
-      ↓
+   ↓
 Inventory Coverage Days
 ```
 
 ```text
-FACT_ORDER_LINE
-      ↓
+ORDER LINE
+   ↓
 Order-line aggregation
-      ↓
+   ↓
 Fill Rate / At-Risk Orders
 ```
 
-Raw fact-to-fact joins must not be used without controlling grain.
+Raw fact-to-fact joins require controlled grain.
 
-## 15. Investigation Architecture
+## 16. Inventory Semantics
+
+Inventory is a periodic snapshot and is semi-additive across time.
+
+Current/latest inventory must select the appropriate latest snapshot at the requested Part × Plant grain.
+
+The Semantic View should use `NON ADDITIVE BY` where required to preserve this behavior.
+
+## 17. Investigation Architecture
 
 Example:
 
 ```text
-Question: Why did OTD decline?
-
-1. Calculate current OTD.
-2. Calculate comparison-period OTD.
-3. Identify dimensions with material deterioration.
-4. Identify strongest contributor.
-5. Trace relevant relationships.
-6. Quantify observed changes.
-7. Produce evidence-backed explanation.
+Why did OTD decline?
+→ current OTD
+→ comparison OTD
+→ deterioration by dimension
+→ strongest contributor
+→ relationship trace
+→ quantified findings
+→ evidence-backed explanation
 ```
 
-## 16. Impact Analysis Architecture
+## 18. Impact Analysis
 
 ### Confirmed impact
-Observed operational fact, such as a delayed shipment.
+Observed delayed shipment linked to a customer.
 
 ### Potential risk
-Deterministic risk condition, such as:
+Deterministic risk condition:
 
 ```text
 Open Order
@@ -335,31 +351,27 @@ Insufficient inventory coverage
 Promised-date exposure
 ```
 
-Confirmed impact and potential risk must not be merged.
+These populations remain separate.
 
-## 17. Impact Explorer
+## 19. Impact Explorer
 
-The application should visually represent governed relationship paths such as:
+Example:
 
 ```text
 Supplier S017
       │
+      ├── PO / Supply Receipt
       ├── Part P104
       │       │
       │       └── Plant PL03
-      │               │
       │               ├── Inventory ↓
       │               ├── Production ↓
       │               └── Orders exposed
       │
-      └── Part P205
-              │
-              └── Plant PL07
+      └── Other supplied parts
 ```
 
-## 18. Evidence Architecture
-
-Important answers should be traceable through:
+## 20. Evidence Architecture
 
 ```text
 Answer
@@ -375,33 +387,24 @@ Generated SQL
 Supporting Result
 ```
 
-## 19. Verified Query Strategy
+## 21. Verified Query Strategy
 
-Maintain a Golden Question Set covering:
-- Basic metrics
-- Dimensional analytics
-- Relationship questions
-- Multi-hop questions
-- Investigation
-- Impact
-- Unsupported/boundary questions
+Maintain a Golden Question Set covering basic metrics, dimensional analytics, relationships, multi-hop analysis, investigation, impact and unsupported/boundary questions.
 
-Verified queries support runtime quality and evaluation.
+Add verified queries after tables, columns, descriptions and metrics are stable.
 
-## 20. Cortex Analyst Evaluation
+## 22. Cortex Analyst Evaluation
 
-Evaluation should measure:
+Measure:
 - SQL correctness
 - Result correctness
 - Semantic interpretation
 - Regression
 - Latency
 
-Verified queries can serve as ground truth for evaluation.
+Start with approximately 10 representative benchmark questions and expand based on failures.
 
-## 21. Application Architecture
-
-Initial product components:
+## 23. Application Architecture
 
 ```text
 app/
@@ -420,17 +423,13 @@ app/
     └── settings.py
 ```
 
-The structure may be simplified during implementation. Avoid premature abstraction.
+## 24. Streamlit Deployment
 
-## 22. Streamlit Deployment
+Preferred target: Streamlit in Snowflake.
 
-Preferred product target: Streamlit in Snowflake.
+Use the runtime supported by the hackathon account and current Snowflake capabilities. Avoid unnecessary infrastructure.
 
-Use the runtime supported by the hackathon account and current Snowflake capabilities. Do not introduce unnecessary infrastructure merely to use a particular runtime.
-
-## 23. Git and Development Architecture
-
-GitHub is the engineering source of truth.
+## 25. Git and Development Architecture
 
 ```text
 Local VS Code
@@ -444,15 +443,15 @@ Snowflake deployment
 Validation
 ```
 
-Codex is primarily used for repository/software engineering. Snowflake-native AI assistance is used for Snowflake-specific development and exploration where useful.
+Codex is primarily for repository/software engineering. Snowflake-native AI assistance is for Snowflake-specific development and exploration.
 
-## 24. Security
+## 26. Security
 
 Never commit passwords, tokens, private keys, API secrets or connection credentials.
 
-Synthetic data must contain no real personal or confidential information.
+Synthetic data contains no real personal or confidential information.
 
-## 25. Cost Architecture
+## 27. Cost Architecture
 
 Controls:
 - Small development warehouse
@@ -463,25 +462,23 @@ Controls:
 - Avoid unnecessary agent calls
 - Monitor credit usage
 
-Increase compute only when evidence shows it is necessary.
+## 28. Failure Handling
 
-## 26. Failure Handling
+Unsupported questions → explain model limitations.
 
-Unsupported questions should explain that the governed model lacks sufficient information.
+Ambiguous questions → request clarification.
 
-Ambiguous questions should request clarification.
+Query failure → show useful error state; never fabricate.
 
-Query failures must not result in fabricated answers.
+Missing evidence → do not claim unsupported confidence.
 
-Missing evidence must not result in unsupported confidence.
+Agent failure → use a simpler governed path where possible.
 
-Agent failures should use a simpler governed analytical path where possible.
-
-## 27. Observability
+## 29. Observability
 
 Retain enough information to debug:
 - User question
-- Selected workflow
+- Workflow
 - Semantic concept
 - Generated SQL
 - Query ID where available
@@ -491,54 +488,61 @@ Retain enough information to debug:
 
 Do not log secrets.
 
-## 28. Architecture Boundaries
+## 30. Architecture Boundaries
 
 Initial ChainLoom does not include:
 - External ERP integration
 - Real production data
+- Lot/batch genealogy
 - Autonomous procurement
 - Autonomous order modification
 - Production-scale streaming
 - Full ML forecasting platform
+- Warehouse/bin-level inventory management
 - Microservice infrastructure
 
-## 29. Implementation Sequence
+## 31. Implementation Sequence
 
 ### Phase 1 — Snowflake foundation
-Database → Schemas → Warehouse → Tables → Validation
+Database → Schemas → Warehouse → Validation
 
-### Phase 2 — Synthetic data
-Master data → Relationships → Transactions → Controlled scenarios
+### Phase 2 — Physical model
+Tables → keys → relationships → grain validation
 
-### Phase 3 — Curated layer
+### Phase 3 — Synthetic data
+Master data → relationships → transactions → controlled scenarios
+
+### Phase 4 — Curated layer
 Raw → Clean → Validate → Business-ready
 
-### Phase 4 — Semantic View
+### Phase 5 — Semantic View
 Logical tables → Relationships → Dimensions → Facts → Metrics → Instructions → Verified queries
 
-### Phase 5 — Evaluation
+### Phase 6 — Evaluation
 Golden Questions → Verified Queries → Evaluation → Fix semantic weaknesses → Re-test
 
-### Phase 6 — Investigation
+### Phase 7 — Investigation
 Agent → Governed analytical tools → Investigation workflow → Evidence
 
-### Phase 7 — Product
+### Phase 8 — Product
 Streamlit → Chat → Investigation → Impact Explorer → Evidence
 
-### Phase 8 — Finalist hardening
+### Phase 9 — Finalist hardening
 Failure testing → Evaluation → Cost review → Demo rehearsal → Documentation → GitHub cleanup → Submission
 
-## 30. Definition of Done
+## 32. Definition of Done
 
 ### Data
 - Synthetic data is reproducible.
 - Referential integrity is validated.
 - Deliberate disruption scenarios exist.
+- Fact grains are tested.
 
 ### Semantics
 - Business entities are governed.
 - Relationships are correct.
 - Metrics have authoritative definitions.
+- Inventory is modeled as semi-additive.
 - Verified questions exist.
 
 ### AI
@@ -551,6 +555,7 @@ Failure testing → Evaluation → Cost review → Demo rehearsal → Documentat
 - Important results are traceable to evidence.
 - Metric definitions are visible.
 - Supplier attribution is not overstated.
+- Causal claims stay within available lineage.
 
 ### Application
 - Product experience is coherent.
@@ -570,7 +575,7 @@ Failure testing → Evaluation → Cost review → Demo rehearsal → Documentat
 - Demo scenario is deterministic.
 - Final submission assets are ready.
 
-## 31. Final Architecture Principle
+## 33. Final Architecture Principle
 
 ```text
                      BUSINESS QUESTION

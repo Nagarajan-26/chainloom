@@ -1,7 +1,7 @@
 # ChainLoom — Project Charter
 
-**Status:** Architecture Review  
-**Version:** 1.0  
+**Status:** Architecture Approved / Model Hardened
+**Version:** 1.1
 **Problem Statement:** Supply Chain Ontology and Governed Conversational Analytics
 
 ## 1. Purpose
@@ -20,6 +20,7 @@ ChainLoom provides a shared, governed understanding of:
 - Products
 - Plants
 - Inventory
+- Purchase-order commitments
 - Supply receipts
 - Customers
 - Orders
@@ -37,8 +38,6 @@ ChainLoom is not intended to be a generic chatbot over tables.
 Its core differentiator is:
 
 **Business meaning → governed semantics → relationship-aware analysis → evidence-backed answer.**
-
-The ontology and metric definitions are first-class product assets.
 
 ## 4. Scope
 
@@ -58,31 +57,31 @@ The ontology and metric definitions are first-class product assets.
 
 ### Out of scope
 - Real production or confidential data
+- Lot/batch genealogy
 - Autonomous procurement
 - Autonomous order modification
 - Full enterprise ERP integration
 - Production-scale streaming platform
 - Full ML forecasting platform
+- Warehouse/bin-level inventory management
+
+The MVP intentionally uses **Plant as the inventory location grain**.
 
 ## 5. Core Scenario
 
-The initial demonstration uses a controlled supplier disruption:
-
-Supplier S017 → delayed supply receipts → affected part P104 → inventory depletion at PL03 → production constraint → order exposure → shipment delays → customer impact.
+Supplier S017 → delayed supplier commitments / supply receipts → affected part P104 → inventory deterioration at PL03 → production constraint → order exposure → shipment delays → customer impact.
 
 The synthetic dataset must contain deterministic ground truth so the scenario can be independently verified.
 
 ## 6. Product Modes
 
 ### Governed Analytics
-Examples:
 - What is our OTD?
 - What is OTD by supplier?
 - Which plant has the highest shipment delay rate?
 - What is the fill rate?
 
 ### Investigation
-Examples:
 - Why did OTD decline?
 - Which supplier or plant contributed most?
 - Which customers are confirmed impacted?
@@ -98,27 +97,24 @@ ChainLoom distinguishes:
 - Potential risk
 - Causal claims
 
-The system must not present a relationship or cause that the underlying data cannot support.
+The MVP does not claim exact receipt-to-shipment causality because it does not implement lot/material genealogy.
 
 ## 8. Success Criteria
 
-The project is successful when:
-1. The ontology is represented in Snowflake.
+1. Ontology represented in Snowflake.
 2. Metrics have authoritative definitions.
 3. Natural-language questions produce consistent answers.
-4. Multi-hop relationships can be traversed for impact analysis.
+4. Multi-hop relationships support impact analysis.
 5. Important answers can be traced to evidence.
-6. The controlled disruption scenario can be reproduced.
-7. A judge can understand the product value through a short, reliable demonstration.
-8. The repository and Snowflake implementation are reproducible.
+6. Controlled disruption is reproducible.
+7. A judge can understand the product through a short reliable demo.
+8. Repository and Snowflake implementation are reproducible.
 
 ## 9. Delivery Philosophy
 
-We prioritize:
 - Correctness over feature count
-- Useful implementation over presentation-only artifacts
 - Current Snowflake capabilities
 - Deterministic synthetic scenarios
-- Explicit metric definitions
+- Explicit metric definitions and grain
 - Small, testable increments
 - Evidence over unsupported AI claims
