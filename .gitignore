@@ -31,3 +31,7 @@ connections.toml
 # Temporary
 tmp/
 temp/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+streamlit/.streamlit/secrets.toml

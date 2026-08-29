@@ -1,0 +1,3 @@
+-- ChainLoom Verified Query Plan v2.1
+-- Intentionally not executable.
+-- Populate only after the semantic foundation passes validation.
