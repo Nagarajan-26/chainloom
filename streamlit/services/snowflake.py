@@ -1,47 +1,27 @@
 import streamlit as st
-import snowflake.connector
 
 
+@st.cache_resource
 def get_connection():
-    return snowflake.connector.connect(
-        user=st.secrets["snowflake"]["user"],
-        password=st.secrets["snowflake"]["password"],
-        account=st.secrets["snowflake"]["account"],
-        warehouse=st.secrets["snowflake"]["warehouse"],
-        database=st.secrets["snowflake"]["database"],
-        schema=st.secrets["snowflake"]["schema"],
-        role=st.secrets["snowflake"]["role"],
-    )
-
-
-def fetch_product_risk_signals():
-    query = """
-        SELECT
-            PRODUCT_ID,
-            PRODUCT_NAME,
-            FULFILLMENT_RATE,
-            ON_TIME_DELIVERY_RATE,
-            PRODUCTION_ATTAINMENT,
-            RISK_SIGNAL_COUNT,
-            FULFILLMENT_RISK_FLAG,
-            DELIVERY_RISK_FLAG,
-            PRODUCTION_RISK_FLAG
-        FROM CHAINLOOM.CURATED.V_PRODUCT_RISK_SIGNALS
-        ORDER BY
-            RISK_SIGNAL_COUNT DESC,
-            PRODUCTION_ATTAINMENT ASC,
-            PRODUCT_NAME
     """
+    Return the native Snowflake connection for Streamlit in Snowflake.
 
-    conn = get_connection()
+    This application runs on the Streamlit container runtime, so we use
+    st.connection("snowflake") rather than st.secrets or _snowflake.
+    """
+    return st.connection("snowflake")
 
-    try:
-        cursor = conn.cursor()
 
-        try:
-            cursor.execute(query)
-            return cursor.fetch_pandas_all()
-        finally:
-            cursor.close()
-    finally:
-        conn.close()
+def get_session():
+    """
+    Return the Snowpark session associated with the native Snowflake
+    Streamlit connection.
+    """
+    return get_connection().session()
+
+
+def fetch_dataframe(query: str):
+    """
+    Execute a SQL query and return the result as a pandas DataFrame.
+    """
+    return get_connection().query(query)
