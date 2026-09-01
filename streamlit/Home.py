@@ -160,75 +160,363 @@ st.markdown(
     """
     <style>
     /* ============================================================
-       PASS 1 — ChainLoom Visual System
-       Visual-only changes. Data, Cortex Analyst, session state,
-       governance logic, and service calls are intentionally untouched.
+       PASS 1.1 — Alignment / hierarchy polish
+       UI-only. Application logic and data flow are untouched.
        ============================================================ */
-
     :root {
-        --cl-ink:#0F172A; --cl-text:#334155; --cl-muted:#64748B;
-        --cl-subtle:#94A3B8; --cl-border:#E2E8F0; --cl-border-strong:#CBD5E1;
-        --cl-surface:#FFFFFF; --cl-canvas:#F5F7FB; --cl-blue:#2563EB;
-        --cl-blue-soft:#EFF6FF; --cl-cyan:#29B5E8; --cl-green:#047857;
-        --cl-green-soft:#ECFDF5; --cl-red:#B91C1C; --cl-red-soft:#FEF2F2;
+        --cl-ink:#0F172A;
+        --cl-text:#334155;
+        --cl-muted:#64748B;
+        --cl-subtle:#94A3B8;
+        --cl-border:#E2E8F0;
+        --cl-border-strong:#CBD5E1;
+        --cl-surface:#FFFFFF;
+        --cl-canvas:#F6F8FC;
+        --cl-blue:#2563EB;
+        --cl-blue-soft:#EFF6FF;
+        --cl-cyan:#29B5E8;
+        --cl-green:#047857;
+        --cl-green-soft:#ECFDF5;
+        --cl-red:#B91C1C;
+        --cl-red-soft:#FEF2F2;
     }
 
     .stApp {
-        background: radial-gradient(circle at 8% 0%, rgba(37,99,235,.045), transparent 28rem), var(--cl-canvas);
+        background:var(--cl-canvas);
         color:var(--cl-text);
     }
-    .block-container { max-width:1480px; padding-top:1.35rem; padding-bottom:3.5rem; }
-    html,body,[class*="css"] { font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-    h1,h2,h3,h4 { color:var(--cl-ink); letter-spacing:-.025em; }
 
+    .block-container {
+        max-width:1420px;
+        padding-top:1rem;
+        padding-bottom:3rem;
+    }
+
+    html, body, [class*="css"] {
+        font-family:Inter,ui-sans-serif,system-ui,-apple-system,
+        BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+
+    h1,h2,h3,h4 {
+        color:var(--cl-ink);
+        letter-spacing:-.025em;
+    }
+
+    /* Header: compact and aligned with the dashboard grid */
     .brand {
-        display:flex; justify-content:space-between; align-items:center; gap:2rem;
-        background:rgba(255,255,255,.96); border:1px solid var(--cl-border);
-        border-radius:14px; padding:1rem 1.15rem; margin-bottom:1.15rem;
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:1.5rem;
+        background:var(--cl-surface);
+        border:1px solid var(--cl-border);
+        border-radius:12px;
+        padding:.82rem 1rem;
+        margin-bottom:.8rem;
+        box-shadow:0 1px 3px rgba(15,23,42,.035);
+    }
+
+    .brand-left {
+        display:flex;
+        align-items:center;
+        gap:12px;
+        min-width:0;
+    }
+
+    .mark {
+        width:38px;
+        height:38px;
+        position:relative;
+        flex:none;
+        border-radius:10px;
+        background:var(--cl-blue-soft);
+        border:1px solid #DBEAFE;
+    }
+
+    .node {
+        position:absolute;
+        width:7px;
+        height:7px;
+        border-radius:50%;
+        background:var(--cl-cyan);
+    }
+
+    .n1{top:5px;left:15px}.n2{top:15px;left:5px}
+    .n3{top:15px;left:26px}.n4{top:26px;left:15px}
+
+    .link {
+        position:absolute;
+        height:1.5px;
+        width:15px;
+        background:var(--cl-border-strong);
+        transform-origin:left center;
+    }
+
+    .l1{top:8px;left:18px;transform:rotate(45deg)}
+    .l2{top:8px;left:15px;transform:rotate(135deg)}
+    .l3{top:18px;left:8px;transform:rotate(45deg)}
+    .l4{top:18px;left:18px;transform:rotate(135deg)}
+
+    .brand-name {
+        font-size:.54rem;
+        font-weight:800;
+        letter-spacing:.13em;
+        text-transform:uppercase;
+        color:var(--cl-muted);
+        line-height:1.1;
+    }
+
+    .brand-title {
+        font-size:1.25rem;
+        line-height:1.05;
+        font-weight:800;
+        color:var(--cl-ink);
+        margin-top:.12rem;
+    }
+
+    .brand-sub {
+        font-size:.66rem;
+        color:var(--cl-subtle);
+        margin-top:.14rem;
+    }
+
+    .live {
+        white-space:nowrap;
+        font-size:.57rem;
+        color:var(--cl-green);
+        background:var(--cl-green-soft);
+        border:1px solid #A7F3D0;
+        border-radius:999px;
+        padding:5px 9px;
+        font-weight:800;
+        letter-spacing:.045em;
+    }
+
+    /* KPI row */
+    div[data-testid="stMetric"] {
+        background:var(--cl-surface);
+        border:1px solid var(--cl-border);
+        border-radius:10px;
+        padding:.72rem .85rem .66rem;
+        min-height:78px;
         box-shadow:0 1px 2px rgba(15,23,42,.025);
     }
-    .brand-left { display:flex; align-items:center; gap:14px; min-width:0; }
-    .mark { width:42px; height:42px; position:relative; flex:none; border-radius:11px; background:var(--cl-blue-soft); border:1px solid #DBEAFE; }
-    .node { position:absolute; width:8px; height:8px; border-radius:50%; background:var(--cl-cyan); box-shadow:0 0 0 3px rgba(41,181,232,.10); }
-    .n1{top:5px;left:17px}.n2{top:17px;left:5px}.n3{top:17px;left:29px}.n4{top:29px;left:17px}
-    .link { position:absolute; height:1.5px; width:17px; background:var(--cl-border-strong); transform-origin:left center; }
-    .l1{top:9px;left:21px;transform:rotate(45deg)} .l2{top:9px;left:17px;transform:rotate(135deg)} .l3{top:21px;left:9px;transform:rotate(45deg)} .l4{top:21px;left:21px;transform:rotate(135deg)}
-    .brand-name { font-size:.61rem; font-weight:800; letter-spacing:.18em; text-transform:uppercase; color:var(--cl-muted); margin-bottom:.08rem; }
-    .brand-title { font-size:1.42rem; line-height:1.05; font-weight:800; color:var(--cl-ink); }
-    .brand-sub { font-size:.72rem; color:var(--cl-subtle); margin-top:.18rem; }
-    .live { white-space:nowrap; font-size:.62rem; color:var(--cl-green); background:var(--cl-green-soft); border:1px solid #A7F3D0; border-radius:999px; padding:6px 10px; font-weight:800; letter-spacing:.055em; }
 
-    div[data-testid="stMetric"] {
-        background:var(--cl-surface); border:1px solid var(--cl-border); border-radius:11px;
-        padding:.9rem 1rem .78rem; min-height:92px; box-shadow:0 1px 2px rgba(15,23,42,.025);
+    div[data-testid="stMetricLabel"] {
+        color:var(--cl-muted);
+        font-size:.62rem;
+        font-weight:750;
     }
-    div[data-testid="stMetricLabel"] { color:var(--cl-muted); font-size:.68rem; font-weight:700; }
-    div[data-testid="stMetricValue"] { color:var(--cl-ink); font-size:1.7rem; line-height:1.05; font-weight:800; letter-spacing:-.035em; }
 
-    .section-label { font-size:.61rem; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:var(--cl-subtle); margin:1.35rem 0 .42rem; }
-    .surface { background:var(--cl-surface); border:1px solid var(--cl-border); border-radius:11px; padding:1rem 1.1rem; box-shadow:0 1px 2px rgba(15,23,42,.02); }
+    div[data-testid="stMetricValue"] {
+        color:var(--cl-ink);
+        font-size:1.48rem;
+        line-height:1.05;
+        font-weight:800;
+        letter-spacing:-.035em;
+    }
 
-    .ai-console { background:var(--cl-surface); border:1px solid #BFDBFE; border-top:3px solid var(--cl-blue); border-radius:13px; padding:1.05rem 1.2rem .82rem; margin-top:1.25rem; box-shadow:0 3px 12px rgba(37,99,235,.045); }
-    .ai-kicker { font-size:.60rem; font-weight:800; letter-spacing:.11em; color:var(--cl-blue); text-transform:uppercase; }
-    .ai-title { font-size:1.24rem; line-height:1.2; font-weight:800; color:var(--cl-ink); margin:.18rem 0 .22rem; }
-    .ai-sub { font-size:.76rem; color:var(--cl-muted); line-height:1.45; }
-    .inv-card { background:var(--cl-surface); border:1px solid var(--cl-border); border-radius:11px; padding:1rem 1.1rem; margin:.75rem 0; box-shadow:0 1px 2px rgba(15,23,42,.02); }
-    .inv-tag { font-size:.58rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--cl-blue); }
-    .inv-q { font-size:.94rem; font-weight:700; color:var(--cl-ink); margin:.25rem 0 .55rem; }
+    /* Consistent section spacing */
+    .section-label {
+        font-size:.58rem;
+        font-weight:800;
+        letter-spacing:.13em;
+        text-transform:uppercase;
+        color:var(--cl-subtle);
+        margin:1rem 0 .34rem;
+    }
 
-    .stButton > button { border-radius:9px; min-height:2.45rem; border:1px solid var(--cl-border-strong); font-weight:650; color:var(--cl-text); background:#FFFFFF; transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease; }
-    .stButton > button:hover { border-color:#93C5FD; box-shadow:0 3px 10px rgba(37,99,235,.08); transform:translateY(-1px); }
-    .stButton > button[kind="primary"] { background:var(--cl-blue); border-color:var(--cl-blue); color:#FFFFFF; }
-    div[data-testid="stTextInput"] input { border:1px solid var(--cl-border-strong); border-radius:10px; background:#FFFFFF; color:var(--cl-ink); min-height:2.7rem; box-shadow:inset 0 1px 1px rgba(15,23,42,.025); }
-    div[data-testid="stTextInput"] input:focus { border-color:#60A5FA; box-shadow:0 0 0 3px rgba(37,99,235,.10); }
+    .surface {
+        background:var(--cl-surface);
+        border:1px solid var(--cl-border);
+        border-radius:10px;
+        padding:.8rem 1rem;
+        box-shadow:0 1px 2px rgba(15,23,42,.02);
+    }
 
-    .gov-good { background:var(--cl-green-soft); border-left:3px solid #22C55E; padding:.58rem .78rem; border-radius:0 7px 7px 0; font-size:.76rem; color:#166534; margin-top:.4rem; line-height:1.45; }
-    .gov-bad { background:var(--cl-red-soft); border-left:3px solid #EF4444; padding:.58rem .78rem; border-radius:0 7px 7px 0; font-size:.76rem; color:#991B1B; margin-top:.4rem; line-height:1.45; }
-    .gov-badges { display:flex; flex-wrap:wrap; gap:.38rem; margin-top:.6rem; }
-    .gb { font-size:.59rem; color:#166534; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:999px; padding:4px 8px; font-weight:650; }
-    .footer { text-align:center; color:#94A3B8; font-size:.61rem; border-top:1px solid var(--cl-border); margin-top:2.5rem; padding:1.1rem; line-height:1.6; }
+    /* Network pulse becomes a full-width status strip rather than a
+       right-column island with unused whitespace beside it. */
+    .network-pulse {
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:1rem;
+        background:var(--cl-surface);
+        border:1px solid var(--cl-border);
+        border-radius:9px;
+        padding:.55rem .8rem;
+        color:var(--cl-muted);
+        font-size:.67rem;
+        box-shadow:0 1px 2px rgba(15,23,42,.02);
+    }
 
-    @media (max-width:900px) { .block-container{padding-top:.9rem;} .brand{align-items:flex-start;} .live{font-size:.56rem;} }
+    .network-pulse strong {
+        color:var(--cl-ink);
+    }
+
+    .network-pulse-meta {
+        color:var(--cl-subtle);
+        font-size:.58rem;
+        white-space:nowrap;
+    }
+
+    /* Ask area: one visual unit */
+    .ai-console {
+        background:var(--cl-surface);
+        border:1px solid #BFDBFE;
+        border-top:3px solid var(--cl-blue);
+        border-radius:12px;
+        padding:.9rem 1rem .55rem;
+        margin-top:1rem;
+        box-shadow:0 2px 9px rgba(37,99,235,.045);
+    }
+
+    .ai-kicker {
+        font-size:.56rem;
+        font-weight:800;
+        letter-spacing:.10em;
+        color:var(--cl-blue);
+        text-transform:uppercase;
+    }
+
+    .ai-title {
+        font-size:1.12rem;
+        line-height:1.2;
+        font-weight:800;
+        color:var(--cl-ink);
+        margin:.14rem 0 .14rem;
+    }
+
+    .ai-sub {
+        font-size:.70rem;
+        color:var(--cl-muted);
+        line-height:1.4;
+    }
+
+    /* Suggested-question buttons */
+    .stButton > button {
+        border-radius:8px;
+        min-height:2.35rem;
+        border:1px solid var(--cl-border-strong);
+        font-weight:620;
+        font-size:.70rem;
+        line-height:1.2;
+        color:var(--cl-text);
+        background:#FFFFFF;
+        padding:.42rem .65rem;
+        transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease;
+    }
+
+    .stButton > button:hover {
+        border-color:#93C5FD;
+        box-shadow:0 3px 9px rgba(37,99,235,.07);
+        transform:translateY(-1px);
+    }
+
+    .stButton > button[kind="primary"] {
+        background:var(--cl-blue);
+        border-color:var(--cl-blue);
+        color:#FFFFFF;
+        font-weight:700;
+    }
+
+    div[data-testid="stTextInput"] input {
+        border:1px solid var(--cl-border-strong);
+        border-radius:8px;
+        background:#FFFFFF;
+        color:var(--cl-ink);
+        min-height:2.55rem;
+        font-size:.76rem;
+    }
+
+    div[data-testid="stTextInput"] input:focus {
+        border-color:#60A5FA;
+        box-shadow:0 0 0 3px rgba(37,99,235,.09);
+    }
+
+    /* Investigation result card */
+    .inv-card {
+        background:var(--cl-surface);
+        border:1px solid var(--cl-border);
+        border-radius:10px;
+        padding:.85rem 1rem;
+        margin:.65rem 0;
+        box-shadow:0 1px 2px rgba(15,23,42,.02);
+    }
+
+    .inv-tag {
+        font-size:.55rem;
+        font-weight:800;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--cl-blue);
+    }
+
+    .inv-q {
+        font-size:.88rem;
+        font-weight:700;
+        color:var(--cl-ink);
+        margin:.18rem 0 .42rem;
+    }
+
+    /* Governance */
+    .gov-good {
+        background:var(--cl-green-soft);
+        border-left:3px solid #22C55E;
+        padding:.52rem .7rem;
+        border-radius:0 6px 6px 0;
+        font-size:.70rem;
+        color:#166534;
+        margin-top:.35rem;
+        line-height:1.4;
+    }
+
+    .gov-bad {
+        background:var(--cl-red-soft);
+        border-left:3px solid #EF4444;
+        padding:.52rem .7rem;
+        border-radius:0 6px 6px 0;
+        font-size:.70rem;
+        color:#991B1B;
+        margin-top:.35rem;
+        line-height:1.4;
+    }
+
+    .gov-badges {
+        display:flex;
+        flex-wrap:wrap;
+        gap:.3rem;
+        margin-top:.5rem;
+    }
+
+    .gb {
+        font-size:.54rem;
+        color:#166534;
+        background:#F0FDF4;
+        border:1px solid #BBF7D0;
+        border-radius:999px;
+        padding:3px 7px;
+        font-weight:650;
+    }
+
+    .footer {
+        text-align:center;
+        color:#94A3B8;
+        font-size:.57rem;
+        border-top:1px solid var(--cl-border);
+        margin-top:2rem;
+        padding:.9rem;
+        line-height:1.5;
+    }
+
+    @media (max-width:900px) {
+        .block-container {padding-top:.7rem;}
+        .brand {align-items:flex-start;}
+        .brand-sub {display:none;}
+        .live {font-size:.52rem;}
+        .network-pulse {align-items:flex-start;flex-direction:column;gap:.25rem;}
+        .network-pulse-meta {white-space:normal;}
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -308,23 +596,24 @@ render_product_risk_panel(risk_df)
 # Network pulse
 # ============================================================
 
-pulse_left, pulse_right = st.columns([2.2, 1], gap="medium")
-with pulse_right:
-    st.markdown('<div class="section-label">Network Pulse</div>', unsafe_allow_html=True)
-    st.markdown(
-        f"""
-        <div class="surface">
-          <b>{products}</b> monitored &nbsp; · &nbsp;
-          <b>{high_risk}</b> high-risk &nbsp; · &nbsp;
-          <b>{watchlist}</b> watchlist &nbsp; · &nbsp;
-          <b>{healthy}</b> healthy
-          <div style="font-size:.6rem;color:#CBD5E1;text-align:right;margin-top:.45rem;">
-            Refreshed {refresh_ts}
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+st.markdown('<div class="section-label">Network Pulse</div>', unsafe_allow_html=True)
+st.markdown(
+    f"""
+    <div class="network-pulse">
+      <div>
+        <strong>{products}</strong> monitored
+        &nbsp; · &nbsp;
+        <strong>{high_risk}</strong> high-risk
+        &nbsp; · &nbsp;
+        <strong>{watchlist}</strong> watchlist
+        &nbsp; · &nbsp;
+        <strong>{healthy}</strong> healthy
+      </div>
+      <div class="network-pulse-meta">Refreshed {refresh_ts}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ============================================================
