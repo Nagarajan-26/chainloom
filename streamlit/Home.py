@@ -230,7 +230,7 @@ st.markdown(
 
     @media (max-width:900px) { .block-container{padding-top:.9rem;} .brand{align-items:flex-start;} .live{font-size:.56rem;} }
     </style>
-
+    """,
     unsafe_allow_html=True,
 )
 
