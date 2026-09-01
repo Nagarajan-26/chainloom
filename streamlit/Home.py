@@ -7,6 +7,8 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
+# PASS 1 — visual system only. Functional/service logic is unchanged.
+
 from components.risk import (
     render_priority_attention,
     render_product_risk_panel,
@@ -157,43 +159,78 @@ def run_analyst_sql(sql: str):
 st.markdown(
     """
     <style>
-    .stApp { background:#F6F8FB; }
-    .block-container { max-width:1440px; padding-top:1.2rem; padding-bottom:2.5rem; }
+    /* ============================================================
+       PASS 1 — ChainLoom Visual System
+       Visual-only changes. Data, Cortex Analyst, session state,
+       governance logic, and service calls are intentionally untouched.
+       ============================================================ */
+
+    :root {
+        --cl-ink:#0F172A; --cl-text:#334155; --cl-muted:#64748B;
+        --cl-subtle:#94A3B8; --cl-border:#E2E8F0; --cl-border-strong:#CBD5E1;
+        --cl-surface:#FFFFFF; --cl-canvas:#F5F7FB; --cl-blue:#2563EB;
+        --cl-blue-soft:#EFF6FF; --cl-cyan:#29B5E8; --cl-green:#047857;
+        --cl-green-soft:#ECFDF5; --cl-red:#B91C1C; --cl-red-soft:#FEF2F2;
+    }
+
+    .stApp {
+        background: radial-gradient(circle at 8% 0%, rgba(37,99,235,.045), transparent 28rem), var(--cl-canvas);
+        color:var(--cl-text);
+    }
+    .block-container { max-width:1480px; padding-top:1.35rem; padding-bottom:3.5rem; }
+    html,body,[class*="css"] { font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    h1,h2,h3,h4 { color:var(--cl-ink); letter-spacing:-.025em; }
 
     .brand {
-        display:flex; justify-content:space-between; align-items:center;
-        padding:.7rem 0 .8rem; border-bottom:1px solid #E2E8F0;
-        margin-bottom:1rem;
+        display:flex; justify-content:space-between; align-items:center; gap:2rem;
+        background:rgba(255,255,255,.96); border:1px solid var(--cl-border);
+        border-radius:14px; padding:1rem 1.15rem; margin-bottom:1.15rem;
+        box-shadow:0 1px 2px rgba(15,23,42,.025);
     }
-    .brand-left { display:flex; align-items:center; gap:13px; }
-    .mark { width:38px; height:38px; position:relative; flex:none; }
-    .node { position:absolute; width:8px; height:8px; border-radius:50%; background:#29B5E8; }
-    .n1{top:1px;left:15px}.n2{top:15px;left:1px}.n3{top:15px;left:29px}.n4{top:29px;left:15px}
-    .link { position:absolute; height:1.5px; width:17px; background:#CBD5E1; transform-origin:left center; }
-    .l1{top:5px;left:19px;transform:rotate(45deg)} .l2{top:5px;left:15px;transform:rotate(135deg)}
-    .l3{top:19px;left:5px;transform:rotate(45deg)} .l4{top:19px;left:19px;transform:rotate(135deg)}
-    .brand-name { font-size:.65rem; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#64748B; }
-    .brand-title { font-size:1.28rem; font-weight:750; color:#0F172A; }
-    .brand-sub { font-size:.72rem; color:#94A3B8; }
-    .live { font-size:.62rem; color:#047857; background:#ECFDF5; border:1px solid #A7F3D0; border-radius:999px; padding:4px 9px; font-weight:700; }
+    .brand-left { display:flex; align-items:center; gap:14px; min-width:0; }
+    .mark { width:42px; height:42px; position:relative; flex:none; border-radius:11px; background:var(--cl-blue-soft); border:1px solid #DBEAFE; }
+    .node { position:absolute; width:8px; height:8px; border-radius:50%; background:var(--cl-cyan); box-shadow:0 0 0 3px rgba(41,181,232,.10); }
+    .n1{top:5px;left:17px}.n2{top:17px;left:5px}.n3{top:17px;left:29px}.n4{top:29px;left:17px}
+    .link { position:absolute; height:1.5px; width:17px; background:var(--cl-border-strong); transform-origin:left center; }
+    .l1{top:9px;left:21px;transform:rotate(45deg)} .l2{top:9px;left:17px;transform:rotate(135deg)} .l3{top:21px;left:9px;transform:rotate(45deg)} .l4{top:21px;left:21px;transform:rotate(135deg)}
+    .brand-name { font-size:.61rem; font-weight:800; letter-spacing:.18em; text-transform:uppercase; color:var(--cl-muted); margin-bottom:.08rem; }
+    .brand-title { font-size:1.42rem; line-height:1.05; font-weight:800; color:var(--cl-ink); }
+    .brand-sub { font-size:.72rem; color:var(--cl-subtle); margin-top:.18rem; }
+    .live { white-space:nowrap; font-size:.62rem; color:var(--cl-green); background:var(--cl-green-soft); border:1px solid #A7F3D0; border-radius:999px; padding:6px 10px; font-weight:800; letter-spacing:.055em; }
 
-    .section-label { font-size:.62rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#94A3B8; margin:1.1rem 0 .45rem; }
-    .surface { background:#FFF; border:1px solid #E2E8F0; border-radius:9px; padding:1rem 1.1rem; }
-    .ai-console { background:#FFF; border:1px solid #BFDBFE; border-top:3px solid #3B82F6; border-radius:10px; padding:1rem 1.2rem .7rem; margin-top:.5rem; }
-    .ai-kicker { font-size:.6rem; font-weight:800; letter-spacing:.1em; color:#2563EB; text-transform:uppercase; }
-    .ai-title { font-size:1.18rem; font-weight:750; color:#1E293B; margin:.15rem 0; }
-    .ai-sub { font-size:.76rem; color:#64748B; }
-    .inv-card { background:#FFF; border:1px solid #E2E8F0; border-radius:9px; padding:1rem 1.1rem; margin:.7rem 0; }
-    .inv-tag { font-size:.58rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#2563EB; }
-    .inv-q { font-size:.92rem; font-weight:650; color:#1E293B; margin:.25rem 0 .6rem; }
-    .gov-good { background:#F0FDF4; border-left:3px solid #22C55E; padding:.55rem .75rem; border-radius:0 6px 6px 0; font-size:.76rem; color:#166534; margin-top:.35rem; }
-    .gov-bad { background:#FEF2F2; border-left:3px solid #EF4444; padding:.55rem .75rem; border-radius:0 6px 6px 0; font-size:.76rem; color:#991B1B; margin-top:.35rem; }
-    .gov-badges { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.5rem; }
-    .gb { font-size:.6rem; color:#166534; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:4px; padding:3px 7px; }
-    .footer { text-align:center; color:#CBD5E1; font-size:.6rem; border-top:1px solid #E2E8F0; margin-top:2rem; padding:1rem; }
-    .stButton > button { border-radius:8px; font-weight:600; }
+    div[data-testid="stMetric"] {
+        background:var(--cl-surface); border:1px solid var(--cl-border); border-radius:11px;
+        padding:.9rem 1rem .78rem; min-height:92px; box-shadow:0 1px 2px rgba(15,23,42,.025);
+    }
+    div[data-testid="stMetricLabel"] { color:var(--cl-muted); font-size:.68rem; font-weight:700; }
+    div[data-testid="stMetricValue"] { color:var(--cl-ink); font-size:1.7rem; line-height:1.05; font-weight:800; letter-spacing:-.035em; }
+
+    .section-label { font-size:.61rem; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:var(--cl-subtle); margin:1.35rem 0 .42rem; }
+    .surface { background:var(--cl-surface); border:1px solid var(--cl-border); border-radius:11px; padding:1rem 1.1rem; box-shadow:0 1px 2px rgba(15,23,42,.02); }
+
+    .ai-console { background:var(--cl-surface); border:1px solid #BFDBFE; border-top:3px solid var(--cl-blue); border-radius:13px; padding:1.05rem 1.2rem .82rem; margin-top:1.25rem; box-shadow:0 3px 12px rgba(37,99,235,.045); }
+    .ai-kicker { font-size:.60rem; font-weight:800; letter-spacing:.11em; color:var(--cl-blue); text-transform:uppercase; }
+    .ai-title { font-size:1.24rem; line-height:1.2; font-weight:800; color:var(--cl-ink); margin:.18rem 0 .22rem; }
+    .ai-sub { font-size:.76rem; color:var(--cl-muted); line-height:1.45; }
+    .inv-card { background:var(--cl-surface); border:1px solid var(--cl-border); border-radius:11px; padding:1rem 1.1rem; margin:.75rem 0; box-shadow:0 1px 2px rgba(15,23,42,.02); }
+    .inv-tag { font-size:.58rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--cl-blue); }
+    .inv-q { font-size:.94rem; font-weight:700; color:var(--cl-ink); margin:.25rem 0 .55rem; }
+
+    .stButton > button { border-radius:9px; min-height:2.45rem; border:1px solid var(--cl-border-strong); font-weight:650; color:var(--cl-text); background:#FFFFFF; transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease; }
+    .stButton > button:hover { border-color:#93C5FD; box-shadow:0 3px 10px rgba(37,99,235,.08); transform:translateY(-1px); }
+    .stButton > button[kind="primary"] { background:var(--cl-blue); border-color:var(--cl-blue); color:#FFFFFF; }
+    div[data-testid="stTextInput"] input { border:1px solid var(--cl-border-strong); border-radius:10px; background:#FFFFFF; color:var(--cl-ink); min-height:2.7rem; box-shadow:inset 0 1px 1px rgba(15,23,42,.025); }
+    div[data-testid="stTextInput"] input:focus { border-color:#60A5FA; box-shadow:0 0 0 3px rgba(37,99,235,.10); }
+
+    .gov-good { background:var(--cl-green-soft); border-left:3px solid #22C55E; padding:.58rem .78rem; border-radius:0 7px 7px 0; font-size:.76rem; color:#166534; margin-top:.4rem; line-height:1.45; }
+    .gov-bad { background:var(--cl-red-soft); border-left:3px solid #EF4444; padding:.58rem .78rem; border-radius:0 7px 7px 0; font-size:.76rem; color:#991B1B; margin-top:.4rem; line-height:1.45; }
+    .gov-badges { display:flex; flex-wrap:wrap; gap:.38rem; margin-top:.6rem; }
+    .gb { font-size:.59rem; color:#166534; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:999px; padding:4px 8px; font-weight:650; }
+    .footer { text-align:center; color:#94A3B8; font-size:.61rem; border-top:1px solid var(--cl-border); margin-top:2.5rem; padding:1.1rem; line-height:1.6; }
+
+    @media (max-width:900px) { .block-container{padding-top:.9rem;} .brand{align-items:flex-start;} .live{font-size:.56rem;} }
     </style>
-    """,
+
     unsafe_allow_html=True,
 )
 
@@ -233,9 +270,9 @@ st.markdown(
           <div class="link l3"></div><div class="link l4"></div>
         </div>
         <div>
-          <div class="brand-name">ChainLoom</div>
-          <div class="brand-title">Supply Chain Intelligence</div>
-          <div class="brand-sub">Control Tower</div>
+          <div class="brand-name">CHAINLOOM · SUPPLY CHAIN INTELLIGENCE</div>
+          <div class="brand-title">Control Tower</div>
+          <div class="brand-sub">Governed executive intelligence across the supply chain</div>
         </div>
       </div>
       <div class="live">● LIVE SNOWFLAKE DATA</div>
