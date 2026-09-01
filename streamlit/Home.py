@@ -153,25 +153,22 @@ def run_analyst_sql(sql: str):
 
 
 # ============================================================
-# Design system
+# ChainLoom — Enterprise Control Tower UI
+# Visual layer only. Functional/service logic above is unchanged.
 # ============================================================
 
 st.markdown(
     """
     <style>
-    /* ============================================================
-       PASS 1.1 — Alignment / hierarchy polish
-       UI-only. Application logic and data flow are untouched.
-       ============================================================ */
     :root {
-        --cl-ink:#0F172A;
+        --cl-ink:#0B1220;
         --cl-text:#334155;
         --cl-muted:#64748B;
         --cl-subtle:#94A3B8;
         --cl-border:#E2E8F0;
         --cl-border-strong:#CBD5E1;
         --cl-surface:#FFFFFF;
-        --cl-canvas:#F6F8FC;
+        --cl-canvas:#F7F9FC;
         --cl-blue:#2563EB;
         --cl-blue-soft:#EFF6FF;
         --cl-cyan:#29B5E8;
@@ -179,237 +176,245 @@ st.markdown(
         --cl-green-soft:#ECFDF5;
         --cl-red:#B91C1C;
         --cl-red-soft:#FEF2F2;
+        --cl-amber:#B45309;
+        --cl-amber-soft:#FFFBEB;
     }
 
     .stApp {
-        background:var(--cl-canvas);
+        background:
+            radial-gradient(circle at 8% 0%, rgba(37,99,235,.045), transparent 30rem),
+            var(--cl-canvas);
         color:var(--cl-text);
     }
 
     .block-container {
-        max-width:1420px;
-        padding-top:1rem;
+        max-width:1480px;
+        padding-top:1.15rem;
         padding-bottom:3rem;
     }
 
     html, body, [class*="css"] {
-        font-family:Inter,ui-sans-serif,system-ui,-apple-system,
-        BlinkMacSystemFont,"Segoe UI",sans-serif;
+        font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     }
 
-    h1,h2,h3,h4 {
-        color:var(--cl-ink);
-        letter-spacing:-.025em;
-    }
+    h1,h2,h3,h4 { color:var(--cl-ink); letter-spacing:-.025em; }
 
-    /* Header: compact and aligned with the dashboard grid */
-    .brand {
+    /* ---------- Header ---------- */
+    .cl-header {
         display:flex;
         justify-content:space-between;
         align-items:center;
         gap:1.5rem;
-        background:var(--cl-surface);
+        background:rgba(255,255,255,.97);
         border:1px solid var(--cl-border);
-        border-radius:12px;
-        padding:.82rem 1rem;
-        margin-bottom:.8rem;
+        border-radius:14px;
+        padding:.95rem 1.1rem;
+        margin-bottom:1rem;
         box-shadow:0 1px 3px rgba(15,23,42,.035);
     }
 
-    .brand-left {
+    .cl-brand {
         display:flex;
         align-items:center;
-        gap:12px;
+        gap:13px;
         min-width:0;
     }
 
-    .mark {
-        width:38px;
-        height:38px;
+    .cl-mark {
+        width:42px;
+        height:42px;
         position:relative;
         flex:none;
-        border-radius:10px;
+        border-radius:11px;
         background:var(--cl-blue-soft);
         border:1px solid #DBEAFE;
     }
 
-    .node {
+    .cl-node {
         position:absolute;
-        width:7px;
-        height:7px;
+        width:8px;
+        height:8px;
         border-radius:50%;
         background:var(--cl-cyan);
+        box-shadow:0 0 0 3px rgba(41,181,232,.10);
     }
 
-    .n1{top:5px;left:15px}.n2{top:15px;left:5px}
-    .n3{top:15px;left:26px}.n4{top:26px;left:15px}
+    .cl-n1{top:5px;left:17px}.cl-n2{top:17px;left:5px}
+    .cl-n3{top:17px;left:29px}.cl-n4{top:29px;left:17px}
 
-    .link {
+    .cl-link {
         position:absolute;
         height:1.5px;
-        width:15px;
-        background:var(--cl-border-strong);
+        width:17px;
+        background:#CBD5E1;
         transform-origin:left center;
     }
 
-    .l1{top:8px;left:18px;transform:rotate(45deg)}
-    .l2{top:8px;left:15px;transform:rotate(135deg)}
-    .l3{top:18px;left:8px;transform:rotate(45deg)}
-    .l4{top:18px;left:18px;transform:rotate(135deg)}
+    .cl-l1{top:9px;left:21px;transform:rotate(45deg)}
+    .cl-l2{top:9px;left:17px;transform:rotate(135deg)}
+    .cl-l3{top:21px;left:9px;transform:rotate(45deg)}
+    .cl-l4{top:21px;left:21px;transform:rotate(135deg)}
 
-    .brand-name {
-        font-size:.54rem;
+    .cl-eyebrow {
+        font-size:.60rem;
         font-weight:800;
-        letter-spacing:.13em;
+        letter-spacing:.16em;
         text-transform:uppercase;
         color:var(--cl-muted);
-        line-height:1.1;
     }
 
-    .brand-title {
-        font-size:1.25rem;
+    .cl-title {
+        font-size:1.42rem;
         line-height:1.05;
         font-weight:800;
         color:var(--cl-ink);
-        margin-top:.12rem;
+        margin-top:.06rem;
     }
 
-    .brand-sub {
-        font-size:.66rem;
+    .cl-subtitle {
+        font-size:.70rem;
         color:var(--cl-subtle);
-        margin-top:.14rem;
+        margin-top:.18rem;
     }
 
-    .live {
+    .cl-live {
         white-space:nowrap;
-        font-size:.57rem;
+        font-size:.60rem;
         color:var(--cl-green);
         background:var(--cl-green-soft);
         border:1px solid #A7F3D0;
         border-radius:999px;
-        padding:5px 9px;
+        padding:6px 10px;
         font-weight:800;
-        letter-spacing:.045em;
+        letter-spacing:.055em;
     }
 
-    /* KPI row */
+    /* ---------- Section hierarchy ---------- */
+    .cl-section {
+        margin:1.15rem 0 .55rem;
+    }
+
+    .cl-section-kicker {
+        font-size:.59rem;
+        font-weight:800;
+        letter-spacing:.14em;
+        text-transform:uppercase;
+        color:var(--cl-blue);
+    }
+
+    .cl-section-title {
+        font-size:1.05rem;
+        line-height:1.2;
+        font-weight:800;
+        color:var(--cl-ink);
+        margin-top:.16rem;
+    }
+
+    .cl-section-sub {
+        font-size:.72rem;
+        color:var(--cl-muted);
+        margin-top:.12rem;
+    }
+
+    /* ---------- KPI cards ---------- */
     div[data-testid="stMetric"] {
         background:var(--cl-surface);
         border:1px solid var(--cl-border);
-        border-radius:10px;
-        padding:.72rem .85rem .66rem;
-        min-height:78px;
+        border-radius:11px;
+        padding:.82rem .95rem .72rem;
+        min-height:88px;
         box-shadow:0 1px 2px rgba(15,23,42,.025);
     }
 
     div[data-testid="stMetricLabel"] {
         color:var(--cl-muted);
-        font-size:.62rem;
-        font-weight:750;
+        font-size:.66rem;
+        font-weight:700;
     }
 
     div[data-testid="stMetricValue"] {
         color:var(--cl-ink);
-        font-size:1.48rem;
+        font-size:1.62rem;
         line-height:1.05;
         font-weight:800;
         letter-spacing:-.035em;
     }
 
-    /* Consistent section spacing */
-    .section-label {
-        font-size:.58rem;
-        font-weight:800;
-        letter-spacing:.13em;
-        text-transform:uppercase;
-        color:var(--cl-subtle);
-        margin:1rem 0 .34rem;
-    }
-
-    .surface {
+    /* ---------- Surfaces ---------- */
+    .cl-surface {
         background:var(--cl-surface);
         border:1px solid var(--cl-border);
-        border-radius:10px;
-        padding:.8rem 1rem;
-        box-shadow:0 1px 2px rgba(15,23,42,.02);
+        border-radius:12px;
+        padding:1rem 1.1rem;
+        box-shadow:0 1px 2px rgba(15,23,42,.025);
     }
 
-    /* Network pulse becomes a full-width status strip rather than a
-       right-column island with unused whitespace beside it. */
-    .network-pulse {
+    .cl-pulse {
         display:flex;
         justify-content:space-between;
         align-items:center;
         gap:1rem;
-        background:var(--cl-surface);
-        border:1px solid var(--cl-border);
-        border-radius:9px;
-        padding:.55rem .8rem;
-        color:var(--cl-muted);
-        font-size:.67rem;
-        box-shadow:0 1px 2px rgba(15,23,42,.02);
+        flex-wrap:wrap;
     }
 
-    .network-pulse strong {
-        color:var(--cl-ink);
+    .cl-pulse-main {
+        font-size:.84rem;
+        color:var(--cl-text);
     }
 
-    .network-pulse-meta {
+    .cl-pulse-main b { color:var(--cl-ink); }
+
+    .cl-refresh {
+        font-size:.61rem;
         color:var(--cl-subtle);
-        font-size:.58rem;
-        white-space:nowrap;
     }
 
-    /* Ask area: one visual unit */
-    .ai-console {
+    /* ---------- AI console ---------- */
+    .cl-ai {
         background:var(--cl-surface);
         border:1px solid #BFDBFE;
         border-top:3px solid var(--cl-blue);
-        border-radius:12px;
-        padding:.9rem 1rem .55rem;
-        margin-top:1rem;
-        box-shadow:0 2px 9px rgba(37,99,235,.045);
+        border-radius:13px;
+        padding:1rem 1.15rem .85rem;
+        margin-top:.75rem;
+        box-shadow:0 3px 12px rgba(37,99,235,.045);
     }
 
-    .ai-kicker {
-        font-size:.56rem;
+    .cl-ai-kicker {
+        font-size:.59rem;
         font-weight:800;
-        letter-spacing:.10em;
+        letter-spacing:.11em;
         color:var(--cl-blue);
         text-transform:uppercase;
     }
 
-    .ai-title {
-        font-size:1.12rem;
+    .cl-ai-title {
+        font-size:1.18rem;
         line-height:1.2;
         font-weight:800;
         color:var(--cl-ink);
-        margin:.14rem 0 .14rem;
+        margin:.18rem 0 .20rem;
     }
 
-    .ai-sub {
-        font-size:.70rem;
+    .cl-ai-sub {
+        font-size:.74rem;
         color:var(--cl-muted);
-        line-height:1.4;
+        line-height:1.45;
     }
 
-    /* Suggested-question buttons */
     .stButton > button {
-        border-radius:8px;
+        border-radius:9px;
         min-height:2.35rem;
         border:1px solid var(--cl-border-strong);
-        font-weight:620;
-        font-size:.70rem;
-        line-height:1.2;
+        font-weight:650;
         color:var(--cl-text);
         background:#FFFFFF;
-        padding:.42rem .65rem;
         transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease;
     }
 
     .stButton > button:hover {
         border-color:#93C5FD;
-        box-shadow:0 3px 9px rgba(37,99,235,.07);
+        box-shadow:0 3px 10px rgba(37,99,235,.08);
         transform:translateY(-1px);
     }
 
@@ -417,105 +422,106 @@ st.markdown(
         background:var(--cl-blue);
         border-color:var(--cl-blue);
         color:#FFFFFF;
-        font-weight:700;
     }
 
     div[data-testid="stTextInput"] input {
         border:1px solid var(--cl-border-strong);
-        border-radius:8px;
+        border-radius:10px;
         background:#FFFFFF;
         color:var(--cl-ink);
-        min-height:2.55rem;
-        font-size:.76rem;
+        min-height:2.65rem;
     }
 
     div[data-testid="stTextInput"] input:focus {
         border-color:#60A5FA;
-        box-shadow:0 0 0 3px rgba(37,99,235,.09);
+        box-shadow:0 0 0 3px rgba(37,99,235,.10);
     }
 
-    /* Investigation result card */
-    .inv-card {
-        background:var(--cl-surface);
+    /* ---------- Investigation ---------- */
+    .cl-investigation {
+        background:#FFFFFF;
         border:1px solid var(--cl-border);
-        border-radius:10px;
-        padding:.85rem 1rem;
-        margin:.65rem 0;
+        border-radius:12px;
+        padding:.95rem 1.05rem;
+        margin:.85rem 0;
         box-shadow:0 1px 2px rgba(15,23,42,.02);
     }
 
-    .inv-tag {
-        font-size:.55rem;
+    .cl-investigation-tag {
+        font-size:.57rem;
         font-weight:800;
-        letter-spacing:.08em;
+        letter-spacing:.10em;
         text-transform:uppercase;
         color:var(--cl-blue);
     }
 
-    .inv-q {
-        font-size:.88rem;
+    .cl-investigation-question {
+        font-size:.91rem;
         font-weight:700;
+        line-height:1.4;
         color:var(--cl-ink);
-        margin:.18rem 0 .42rem;
+        margin-top:.24rem;
     }
 
-    /* Governance */
-    .gov-good {
+    .cl-finding {
+        border-left:3px solid #93C5FD;
+        background:#F8FAFC;
+        border-radius:0 8px 8px 0;
+        padding:.75rem .85rem;
+        margin:.65rem 0;
+        font-size:.80rem;
+        line-height:1.55;
+    }
+
+    /* ---------- Governance ---------- */
+    .cl-gov-good {
         background:var(--cl-green-soft);
         border-left:3px solid #22C55E;
-        padding:.52rem .7rem;
-        border-radius:0 6px 6px 0;
-        font-size:.70rem;
+        padding:.58rem .78rem;
+        border-radius:0 7px 7px 0;
+        font-size:.74rem;
         color:#166534;
-        margin-top:.35rem;
-        line-height:1.4;
+        margin-top:.4rem;
+        line-height:1.45;
     }
 
-    .gov-bad {
+    .cl-gov-bad {
         background:var(--cl-red-soft);
         border-left:3px solid #EF4444;
-        padding:.52rem .7rem;
-        border-radius:0 6px 6px 0;
-        font-size:.70rem;
+        padding:.58rem .78rem;
+        border-radius:0 7px 7px 0;
+        font-size:.74rem;
         color:#991B1B;
-        margin-top:.35rem;
-        line-height:1.4;
+        margin-top:.4rem;
+        line-height:1.45;
     }
 
-    .gov-badges {
-        display:flex;
-        flex-wrap:wrap;
-        gap:.3rem;
-        margin-top:.5rem;
-    }
-
-    .gb {
-        font-size:.54rem;
+    .cl-gov-badge {
+        display:inline-block;
+        font-size:.57rem;
         color:#166534;
         background:#F0FDF4;
         border:1px solid #BBF7D0;
         border-radius:999px;
-        padding:3px 7px;
+        padding:4px 8px;
+        margin:.2rem .25rem .2rem 0;
         font-weight:650;
     }
 
-    .footer {
+    .cl-footer {
         text-align:center;
         color:#94A3B8;
-        font-size:.57rem;
+        font-size:.60rem;
         border-top:1px solid var(--cl-border);
-        margin-top:2rem;
-        padding:.9rem;
-        line-height:1.5;
+        margin-top:2.2rem;
+        padding:1rem;
+        line-height:1.6;
     }
 
     @media (max-width:900px) {
-        .block-container {padding-top:.7rem;}
-        .brand {align-items:flex-start;}
-        .brand-sub {display:none;}
-        .live {font-size:.52rem;}
-        .network-pulse {align-items:flex-start;flex-direction:column;gap:.25rem;}
-        .network-pulse-meta {white-space:normal;}
+        .block-container { padding-top:.75rem; }
+        .cl-header { align-items:flex-start; }
+        .cl-live { font-size:.54rem; }
     }
     </style>
     """,
@@ -539,7 +545,6 @@ high_risk = int((risk_df["RISK_SIGNAL_COUNT"].fillna(0) >= 2).sum())
 watchlist = int((risk_df["RISK_SIGNAL_COUNT"].fillna(0) == 1).sum())
 healthy = int((risk_df["RISK_SIGNAL_COUNT"].fillna(0) == 0).sum())
 products = len(risk_df)
-
 refresh_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -549,27 +554,44 @@ refresh_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 st.markdown(
     """
-    <div class="brand">
-      <div class="brand-left">
-        <div class="mark">
-          <div class="node n1"></div><div class="node n2"></div>
-          <div class="node n3"></div><div class="node n4"></div>
-          <div class="link l1"></div><div class="link l2"></div>
-          <div class="link l3"></div><div class="link l4"></div>
+    <div class="cl-header">
+      <div class="cl-brand">
+        <div class="cl-mark">
+          <div class="cl-node cl-n1"></div><div class="cl-node cl-n2"></div>
+          <div class="cl-node cl-n3"></div><div class="cl-node cl-n4"></div>
+          <div class="cl-link cl-l1"></div><div class="cl-link cl-l2"></div>
+          <div class="cl-link cl-l3"></div><div class="cl-link cl-l4"></div>
         </div>
         <div>
-          <div class="brand-name">CHAINLOOM · SUPPLY CHAIN INTELLIGENCE</div>
-          <div class="brand-title">Control Tower</div>
-          <div class="brand-sub">Governed executive intelligence across the supply chain</div>
+          <div class="cl-eyebrow">CHAINLOOM · SUPPLY CHAIN INTELLIGENCE</div>
+          <div class="cl-title">Control Tower</div>
+          <div class="cl-subtitle">Governed executive intelligence across the supply chain</div>
         </div>
       </div>
-      <div class="live">● LIVE SNOWFLAKE DATA</div>
+      <div class="cl-live">● LIVE SNOWFLAKE DATA</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# ============================================================
+# Executive signals
+# ============================================================
+
+st.markdown(
+    """
+    <div class="cl-section">
+      <div class="cl-section-kicker">EXECUTIVE SIGNALS</div>
+      <div class="cl-section-title">Network health at a glance</div>
+      <div class="cl-section-sub">Current indicators from governed ChainLoom data</div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 k1, k2, k3, k4, k5 = st.columns(5)
+
 with k1:
     st.metric("High-Risk Products", high_risk, help="Products with two or more independent risk signals.")
 with k2:
@@ -585,7 +607,7 @@ with k5:
 
 
 # ============================================================
-# Existing governed executive panels
+# Priority attention + product risk
 # ============================================================
 
 render_priority_attention(risk_df)
@@ -596,20 +618,26 @@ render_product_risk_panel(risk_df)
 # Network pulse
 # ============================================================
 
-st.markdown('<div class="section-label">Network Pulse</div>', unsafe_allow_html=True)
+st.markdown(
+    """
+    <div class="cl-section">
+      <div class="cl-section-kicker">NETWORK PULSE</div>
+      <div class="cl-section-title">Current network posture</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.markdown(
     f"""
-    <div class="network-pulse">
-      <div>
-        <strong>{products}</strong> monitored
-        &nbsp; · &nbsp;
-        <strong>{high_risk}</strong> high-risk
-        &nbsp; · &nbsp;
-        <strong>{watchlist}</strong> watchlist
-        &nbsp; · &nbsp;
-        <strong>{healthy}</strong> healthy
+    <div class="cl-surface cl-pulse">
+      <div class="cl-pulse-main">
+        <b>{products}</b> monitored &nbsp;·&nbsp;
+        <b>{high_risk}</b> high-risk &nbsp;·&nbsp;
+        <b>{watchlist}</b> watchlist &nbsp;·&nbsp;
+        <b>{healthy}</b> healthy
       </div>
-      <div class="network-pulse-meta">Refreshed {refresh_ts}</div>
+      <div class="cl-refresh">Refreshed {refresh_ts}</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -617,15 +645,15 @@ st.markdown(
 
 
 # ============================================================
-# Ask ChainLoom — working suggestion buttons + investigation
+# Ask ChainLoom
 # ============================================================
 
 st.markdown(
     """
-    <div class="ai-console">
-      <div class="ai-kicker">Ask ChainLoom — AI-Assisted Investigation</div>
-      <div class="ai-title">What would you like to investigate?</div>
-      <div class="ai-sub">Explore governed supply-chain intelligence using natural language.</div>
+    <div class="cl-ai">
+      <div class="cl-ai-kicker">AI-ASSISTED INVESTIGATION</div>
+      <div class="cl-ai-title">Ask ChainLoom</div>
+      <div class="cl-ai-sub">Explore governed supply-chain intelligence using natural language.</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -640,7 +668,6 @@ if "analyst_input" not in st.session_state:
 
 
 def _choose_suggestion(text: str):
-    # The callback updates the widget's own state before the next rerun.
     st.session_state["analyst_input"] = text
 
 
@@ -650,6 +677,8 @@ suggestions = [
     "Which parts are below safety stock?",
     "Which suppliers have the highest defect rate?",
 ]
+
+st.caption("Suggested investigations")
 
 cols = st.columns(4)
 for i, suggestion in enumerate(suggestions):
@@ -669,7 +698,11 @@ question = st.text_input(
     label_visibility="collapsed",
 )
 
-ask = st.button("Investigate", type="primary", key="investigate_button")
+ask_col, clear_col = st.columns([1, 5])
+with ask_col:
+    ask = st.button("Investigate", type="primary", key="investigate_button", use_container_width=True)
+with clear_col:
+    st.caption("Responses are grounded in the ChainLoom semantic view and governed analytical surfaces.")
 
 if ask:
     clean_question = question.strip()
@@ -697,32 +730,46 @@ if ask:
 
                 df_result = run_analyst_sql(parsed["sql"]) if parsed["sql"] else None
                 st.session_state["analyst_results"].append(
-                    {
-                        "question": clean_question,
-                        "parsed": parsed,
-                        "df": df_result,
-                    }
+                    {"question": clean_question, "parsed": parsed, "df": df_result}
                 )
             except Exception as exc:
                 st.error(f"Cortex Analyst error: {exc}")
 
+
+# ============================================================
+# Investigation results
+# ============================================================
+
+if st.session_state["analyst_results"]:
+    st.markdown(
+        """
+        <div class="cl-section">
+          <div class="cl-section-kicker">INVESTIGATION</div>
+          <div class="cl-section-title">Your governed investigation</div>
+          <div class="cl-section-sub">Questions, findings and generated SQL from Cortex Analyst</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 for entry in reversed(st.session_state["analyst_results"]):
     parsed = entry["parsed"]
 
     st.markdown(
         f"""
-        <div class="inv-card">
-          <div class="inv-tag">Ask ChainLoom — Your Investigation</div>
-          <div class="inv-q">{entry["question"]}</div>
+        <div class="cl-investigation">
+          <div class="cl-investigation-tag">ASK CHAINLOOM · INVESTIGATION</div>
+          <div class="cl-investigation-question">{entry["question"]}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     if parsed["text"]:
-        st.markdown("**Finding**")
-        st.markdown(parsed["text"])
+        st.markdown(
+            f'<div class="cl-finding"><b>Finding</b><br>{parsed["text"]}</div>',
+            unsafe_allow_html=True,
+        )
 
     for warning in parsed["warnings"]:
         st.warning(warning)
@@ -740,7 +787,7 @@ for entry in reversed(st.session_state["analyst_results"]):
         else:
             st.caption("No SQL was generated.")
 
-    with st.expander("View governance notes"):
+    with st.expander("View governance metadata"):
         st.markdown(
             f"**Semantic View:** `{SEMANTIC_VIEW}`  \n"
             f"**Request ID:** `{parsed.get('request_id','')}`  \n"
@@ -749,11 +796,19 @@ for entry in reversed(st.session_state["analyst_results"]):
 
 
 # ============================================================
-# Trust & Governance
+# Trust & governance
 # ============================================================
 
-st.markdown('<div class="section-label">Trust &amp; Governance</div>', unsafe_allow_html=True)
-st.caption("ChainLoom makes analytical boundaries explicit.")
+st.markdown(
+    """
+    <div class="cl-section">
+      <div class="cl-section-kicker">TRUST &amp; GOVERNANCE</div>
+      <div class="cl-section-title">Make the analytical boundary visible</div>
+      <div class="cl-section-sub">ChainLoom distinguishes what the data can establish from what it cannot.</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 challenges = [
     {
@@ -772,7 +827,7 @@ challenges = [
     },
     {
         "badge": "INDEPENDENT SIGNALS",
-        "label": "Can multiple risk signals be combined without inventing causality?",
+        "label": "Can multiple risk signals be combined safely?",
         "question": "Which products currently show multiple independent supply-chain risk signals across fulfillment, delivery, and production?",
         "can": "Multiple independent product risk signals can be reported using the governed RISK_SIGNAL_COUNT.",
         "cannot": "A weighted or causal risk score cannot be inferred. Co-occurrence does not imply causation.",
@@ -784,17 +839,18 @@ for i, ch in enumerate(challenges):
     with gc[i]:
         st.markdown(
             f"""
-            <div class="surface" style="min-height:105px;">
-              <div style="font-size:.55rem;font-weight:800;letter-spacing:.07em;color:#2563EB;">
+            <div class="cl-surface" style="min-height:112px;">
+              <div style="font-size:.55rem;font-weight:800;letter-spacing:.08em;color:#2563EB;">
                 {ch["badge"]}
               </div>
-              <div style="font-size:.78rem;font-weight:650;color:#334155;margin-top:.35rem;">
+              <div style="font-size:.78rem;font-weight:700;color:#334155;margin-top:.38rem;line-height:1.35;">
                 {ch["label"]}
               </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
+
         if st.button("Run Challenge", key=f"challenge_{i}", use_container_width=True):
             with st.spinner("Running governance challenge..."):
                 try:
@@ -802,10 +858,13 @@ for i, ch in enumerate(challenges):
                     parsed = parse_analyst_response(raw)
 
                     st.markdown("**BOUNDARY ENFORCED**" if i < 2 else "**GOVERNED**")
+
                     if parsed["text"]:
                         st.markdown(parsed["text"])
+
                     for warning in parsed["warnings"]:
                         st.warning(warning)
+
                     if parsed["sql"]:
                         df = run_analyst_sql(parsed["sql"])
                         if df is not None and not df.empty:
@@ -814,10 +873,11 @@ for i, ch in enumerate(challenges):
                             st.code(parsed["sql"], language="sql")
 
                     st.markdown(
-                        f'<div class="gov-good"><b>What the data can establish:</b> {ch["can"]}</div>'
-                        f'<div class="gov-bad"><b>What the data cannot establish:</b> {ch["cannot"]}</div>',
+                        f'<div class="cl-gov-good"><b>What the data can establish:</b> {ch["can"]}</div>'
+                        f'<div class="cl-gov-bad"><b>What the data cannot establish:</b> {ch["cannot"]}</div>',
                         unsafe_allow_html=True,
                     )
+
                     if parsed.get("request_id"):
                         st.caption(f"Request ID: {parsed['request_id']}")
                 except Exception as exc:
@@ -826,13 +886,13 @@ for i, ch in enumerate(challenges):
 
 st.markdown(
     """
-    <div class="gov-badges">
-      <span class="gb">✓ Snowflake Semantic View</span>
-      <span class="gb">✓ Verified Query Repository</span>
-      <span class="gb">✓ Independent Analytical Surfaces</span>
-      <span class="gb">✓ No Unsupported Fact-to-Fact Joins</span>
-      <span class="gb">✓ No Unsupported Causal Inference</span>
-      <span class="gb">✓ Semi-Additive Inventory Handling</span>
+    <div style="margin-top:.75rem;">
+      <span class="cl-gov-badge">✓ Snowflake Semantic View</span>
+      <span class="cl-gov-badge">✓ Verified Query Repository</span>
+      <span class="cl-gov-badge">✓ Independent Analytical Surfaces</span>
+      <span class="cl-gov-badge">✓ No Unsupported Fact-to-Fact Joins</span>
+      <span class="cl-gov-badge">✓ No Unsupported Causal Inference</span>
+      <span class="cl-gov-badge">✓ Semi-Additive Inventory Handling</span>
     </div>
     """,
     unsafe_allow_html=True,
@@ -860,7 +920,11 @@ with st.expander("How ChainLoom reasons"):
     )
 
 st.markdown(
-    f'<div class="footer">ChainLoom · Snowflake-Native Supply Chain Intelligence<br>'
-    f'Semantic View: {SEMANTIC_VIEW} · Refreshed: {refresh_ts}</div>',
+    f"""
+    <div class="cl-footer">
+      ChainLoom · Snowflake-Native Supply Chain Intelligence<br>
+      Semantic View: {SEMANTIC_VIEW} · Refreshed: {refresh_ts}
+    </div>
+    """,
     unsafe_allow_html=True,
 )
