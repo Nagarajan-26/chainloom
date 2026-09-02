@@ -19,7 +19,14 @@ SEMANTIC_VIEW = "CHAINLOOM.SEMANTIC.CHAINLOOM_ANALYTICS"
 
 
 def call_analyst(question: str, history: list | None = None) -> dict:
-    import _snowflake
+    """Call Cortex Analyst from the Snowflake Container Runtime.
+
+    Container Runtime does not provide the private `_snowflake` module.
+    Snowflake exposes an OAuth session token to the container at
+    /snowflake/session/token, which can be used with the Cortex Analyst
+    REST API.
+    """
+    import requests
 
     if history is None:
         messages = [{"role": "user", "content": [{"type": "text", "text": question}]}]
@@ -27,9 +34,44 @@ def call_analyst(question: str, history: list | None = None) -> dict:
         messages = history + [
             {"role": "user", "content": [{"type": "text", "text": question}]}
         ]
-    request_body = {"messages": messages, "semantic_view": SEMANTIC_VIEW}
-    resp = _snowflake.send_message("analyst", request_body)
-    return json.loads(resp)
+
+    request_body = {
+        "messages": messages,
+        "semantic_view": SEMANTIC_VIEW,
+    }
+
+    snowflake_host = os.getenv("SNOWFLAKE_HOST")
+    if not snowflake_host:
+        raise RuntimeError("SNOWFLAKE_HOST is not available in the Container Runtime.")
+
+    try:
+        with open("/snowflake/session/token", "r", encoding="utf-8") as token_file:
+            token = token_file.read().strip()
+    except OSError as exc:
+        raise RuntimeError(
+            "Snowflake Container Runtime session token is unavailable."
+        ) from exc
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Bearer {token}",
+        "X-Snowflake-Authorization-Token-Type": "OAUTH",
+    }
+
+    resp = requests.post(
+        f"https://{snowflake_host}/api/v2/cortex/analyst/message",
+        headers=headers,
+        json=request_body,
+        timeout=120,
+    )
+
+    if resp.status_code >= 400:
+        raise RuntimeError(
+            f"Cortex Analyst REST API returned HTTP {resp.status_code}: {resp.text}"
+        )
+
+    return resp.json()
 
 
 def parse_analyst_response(resp: dict) -> dict:
