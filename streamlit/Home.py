@@ -142,15 +142,42 @@ def load_inventory_trend():
     """).to_pandas()
 
 
+@st.cache_data(ttl=120)
+def load_latest_inventory_exceptions():
+    return session.sql("""
+        SELECT SNAPSHOT_DATE,
+               COUNT(DISTINCT PART_ID) AS PARTS_BELOW_SAFETY_STOCK
+        FROM CHAINLOOM.CURATED.V_INVENTORY_POSITION
+        WHERE SNAPSHOT_DATE = (
+            SELECT MAX(SNAPSHOT_DATE)
+            FROM CHAINLOOM.CURATED.V_INVENTORY_POSITION
+        )
+        AND AVAILABLE_QUANTITY < SAFETY_STOCK_QUANTITY
+        GROUP BY SNAPSHOT_DATE
+    """).to_pandas()
+
+
 risk_df = load_risk_signals()
 fulfillment_pct, otd_pct = load_executive_kpis()
 inv_trend_df = load_inventory_trend()
+inv_exception_df = load_latest_inventory_exceptions()
 refresh_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
 
 high_risk_count = int((risk_df["RISK_SIGNAL_COUNT"] >= 2).sum())
 watchlist_count = int((risk_df["RISK_SIGNAL_COUNT"] == 1).sum())
 healthy_count = int((risk_df["RISK_SIGNAL_COUNT"] == 0).sum())
+attention_count = high_risk_count + watchlist_count
 monitored_count = int(risk_df["PRODUCT_ID"].nunique()) if "PRODUCT_ID" in risk_df.columns else len(risk_df)
+
+# Deterministic display priority only: signal count, then lowest fulfillment, then lowest OTD.
+# This is a tie-breaker, not a composite risk score.
+priority_df = risk_df.copy()
+priority_df["_ff_sort"] = pd.to_numeric(priority_df["FULFILLMENT_RATE"], errors="coerce").fillna(999)
+priority_df["_otd_sort"] = pd.to_numeric(priority_df["ON_TIME_DELIVERY_RATE"], errors="coerce").fillna(999)
+priority_df = priority_df.sort_values(
+    ["RISK_SIGNAL_COUNT", "_ff_sort", "_otd_sort", "PRODUCT_ID"],
+    ascending=[False, True, True, True],
+)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -273,6 +300,10 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystem
 .pulse-n { font-size: 1.15rem; font-weight: 700; color: #0F172A; line-height: 1; }
 .pulse-n.d { color: #DC2626; } .pulse-n.w { color: #D97706; } .pulse-n.g { color: #059669; }
 .pulse-l { font-size: 0.68rem; color: #64748B; }
+.posture-head { display: flex; align-items: baseline; gap: 6px; }
+.posture-main { font-size: 1.35rem; font-weight: 700; color: #0F172A; line-height: 1.1; }
+.posture-label { font-size: 0.72rem; color: #475569; }
+.posture-share { font-size: 0.62rem; color: #94A3B8; margin-top: 0.15rem; }
 
 .pulse-table { width: 100%; border-collapse: collapse; margin-top: 0.65rem; }
 .pulse-table th {
@@ -296,13 +327,16 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystem
     border: 1px solid #E2E8F0; border-radius: 4px; padding: 1px 6px;
     font-size: 0.65rem; white-space: nowrap;
 }
-.pt-miss::after { content: " unavailable"; color: #94A3B8; font-weight: 500; }
+.pt-miss::after { content: none; }
 .pulse-ts {
     font-size: 0.6rem; color: #CBD5E1; margin-top: 0.4rem; text-align: right;
 }
 
 /* ── Inventory panel ────────────────────────────────────── */
-.inv-note { font-size: 0.65rem; color: #94A3B8; font-style: italic; margin-top: 0.3rem; }
+.inv-note { font-size: 0.65rem; color: #64748B; margin-top: 0.3rem; line-height: 1.45; }
+.inv-note strong { color: #334155; }
+.inv-exception { font-size: 0.68rem; color: #92400E; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 5px; padding: 0.45rem 0.65rem; margin-top: 0.45rem; }
+.finding-surface { background: #F8FAFC; border-left: 3px solid #3B82F6; border-radius: 0 6px 6px 0; padding: 0.65rem 0.8rem; margin-bottom: 0.55rem; }
 
 /* ── AI console ─────────────────────────────────────────── */
 .ai-console {
@@ -401,6 +435,10 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystem
 .pt-sig.high { background: #FEF2F2; color: #DC2626; }
 .pt-sig.watch { background: #FFF7ED; color: #D97706; }
 .pt-sig.ok { background: #F0FDF4; color: #059669; }
+.pt-state { display: inline-block; font-size: 0.65rem; font-weight: 650; border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
+.pt-state.high { background: #FEF2F2; color: #DC2626; }
+.pt-state.watch { background: #FFF7ED; color: #D97706; }
+.pt-state.ok { background: #F0FDF4; color: #059669; }
 
 /* ── Governance posture ────────────────────────────────── */
 .gov-overview {
@@ -494,19 +532,19 @@ st.markdown(f"""
         <div class="md">1 signal</div>
     </div>
     <div class="m-cell">
-        <div class="ml">Products Monitored</div>
-        <div class="mv">{monitored_count}</div>
-        <div class="md">across network</div>
+        <div class="ml">Products Needing Attention</div>
+        <div class="mv{" d" if attention_count > 0 else ""}">{attention_count}</div>
+        <div class="md">of {monitored_count} products</div>
     </div>
     <div class="m-cell">
         <div class="ml">Network Fulfillment</div>
         <div class="mv {ff_c}">{ff_v}</div>
-        <div class="md">order fill rate</div>
+        <div class="md">all available orders</div>
     </div>
     <div class="m-cell">
         <div class="ml">On-Time Delivery</div>
         <div class="mv {otd_c}">{otd_v}</div>
-        <div class="md">delivered on/before promise</div>
+        <div class="md">eligible shipments</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -521,7 +559,7 @@ ef_left, ef_right = st.columns([65, 35], gap="medium")
 with ef_left:
     st.markdown('<div class="sec-label">Priority Attention</div>', unsafe_allow_html=True)
 
-    top = risk_df.iloc[0] if len(risk_df) > 0 and risk_df.iloc[0]["RISK_SIGNAL_COUNT"] > 0 else None
+    top = priority_df.iloc[0] if len(priority_df) > 0 and priority_df.iloc[0]["RISK_SIGNAL_COUNT"] > 0 else None
 
     if top is not None:
         sig_count = int(top["RISK_SIGNAL_COUNT"])
@@ -549,20 +587,16 @@ with ef_left:
         if prod_att is not None and pd.notna(prod_att):
             met_html += f'<div class="pri-met"><strong>{prod_att:.0%}</strong> Production Attainment</div>'
 
-        # Dynamically derive why surfaced — no composite language
+        # Explain the selection using observable signals only — no composite score.
         why_parts = []
         if top.get("FULFILLMENT_RISK_FLAG") and ff_rate is not None and pd.notna(ff_rate):
-            why_parts.append(f"fulfillment at {ff_rate:.0%}")
+            why_parts.append(f"fulfillment {ff_rate:.0%}")
         if top.get("DELIVERY_RISK_FLAG") and otd_rate is not None and pd.notna(otd_rate):
-            why_parts.append(f"on-time delivery at {otd_rate:.0%}")
+            why_parts.append(f"on-time delivery {otd_rate:.0%}")
         if top.get("PRODUCTION_RISK_FLAG") and prod_att is not None and pd.notna(prod_att):
-            why_parts.append(f"production attainment at {prod_att:.0%}")
-        if len(why_parts) > 1:
-            primary = why_parts[0]
-            also = "; ".join(f"{p} is also below the network threshold" for p in why_parts[1:])
-            why_text = f"Why surfaced: {primary} is the lowest among products with {sig_count} independent signals; {also}."
-        elif len(why_parts) == 1:
-            why_text = f"Why surfaced: {why_parts[0]} below threshold with {sig_count} independent signal{'s' if sig_count != 1 else ''}."
+            why_parts.append(f"production attainment {prod_att:.0%}")
+        if why_parts:
+            why_text = f"Why surfaced: {sig_count} independent risk signals — " + "; ".join(why_parts) + "."
         else:
             why_text = f"Why surfaced: {sig_count} independent risk signals detected."
 
@@ -573,7 +607,7 @@ with ef_left:
             <div class="pri-sigs">{sig_count} independent risk signal{"s" if sig_count != 1 else ""} \u00b7 {signal_text}</div>
             <div class="pri-mets">{met_html}</div>
             <div class="pri-why">{why_text}</div>
-            <div class="pri-gov">Signals are independently observed indicators and do not establish causality.</div>
+            <div class="pri-gov">Priority order uses signal count first; supporting metrics only break ties. Signals are independently observed indicators and do not establish causality.</div>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -583,10 +617,11 @@ with ef_left:
             unsafe_allow_html=True,
         )
 
-# ── RIGHT: NETWORK PULSE ─────────────────────────────────────────────────
+# ── RIGHT: NETWORK POSTURE ────────────────────────────────────────────────
 with ef_right:
-    st.markdown('<div class="sec-label">Network Pulse</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-label">Network Posture</div>', unsafe_allow_html=True)
     total = monitored_count or 1
+    attention_share = attention_count / total
     pulse_rows = [
         ("High Risk", high_risk_count, "high"),
         ("Watchlist", watchlist_count, "watch"),
@@ -600,24 +635,18 @@ with ef_right:
 
     st.markdown(f"""
     <div class="surface" style="padding:0.85rem 0.95rem;">
-        <div class="pulse-grid">
-            <div class="pulse-cell">
-                <div class="pulse-n">{monitored_count}</div>
-                <div class="pulse-l">Monitored</div>
-            </div>
-            <div class="pulse-cell">
-                <div class="pulse-n d">{high_risk_count}</div>
-                <div class="pulse-l">High Risk</div>
-            </div>
+        <div class="posture-head">
+            <div class="posture-main">{attention_count} of {monitored_count}</div>
+            <div class="posture-label">products require attention</div>
         </div>
+        <div class="posture-share">{attention_share:.1%} of network scope</div>
         <table class="pulse-table">
-            <thead><tr><th>Status</th><th>Products</th><th>Share</th></tr></thead>
+            <thead><tr><th>Attention state</th><th>Products</th><th>Share</th></tr></thead>
             <tbody>{pulse_table_rows}</tbody>
         </table>
-        <div class="pulse-ts">Last refreshed: {refresh_ts}</div>
+        <div class="pulse-ts">Network scope: {monitored_count} products · Last refreshed: {refresh_ts}</div>
     </div>
     """, unsafe_allow_html=True)
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 6. NETWORK INVENTORY INTELLIGENCE
@@ -638,16 +667,25 @@ if not inv_trend_df.empty:
     total_snaps = len(inv_trend_df)
     below_count = int((inv_trend_df["AVAILABLE_INVENTORY"] < inv_trend_df["SAFETY_STOCK_LEVEL"]).sum())
     if below_count == 0:
-        inv_insight = "Inventory remains above safety stock across all displayed snapshots."
+        inv_trend_insight = "Network available inventory stayed above aggregate safety stock in every displayed snapshot."
     elif below_count == total_snaps:
-        inv_insight = "Inventory is below safety stock across all displayed snapshots."
+        inv_trend_insight = "Network available inventory was below aggregate safety stock in every displayed snapshot."
     else:
-        inv_insight = f"Inventory is below safety stock in {below_count} of {total_snaps} displayed snapshots."
+        inv_trend_insight = f"Network available inventory was below aggregate safety stock in {below_count} of {total_snaps} displayed snapshots."
 
-    st.markdown(f'<div class="inv-note">{inv_insight}</div>', unsafe_allow_html=True)
+    if not inv_exception_df.empty:
+        latest_date = pd.to_datetime(inv_exception_df.iloc[0]["SNAPSHOT_DATE"]).strftime("%Y-%m-%d")
+        parts_below = int(inv_exception_df.iloc[0]["PARTS_BELOW_SAFETY_STOCK"])
+        inv_exception = f"Latest snapshot · {latest_date} · {parts_below} part{'s' if parts_below != 1 else ''} below safety stock."
+    else:
+        latest_date = pd.to_datetime(inv_trend_df["SNAPSHOT_DATE"]).max().strftime("%Y-%m-%d")
+        inv_exception = f"Latest snapshot · {latest_date} · No parts below safety stock."
+
+    st.markdown(f'<div class="inv-note"><strong>Network position:</strong> {inv_trend_insight}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="inv-exception"><strong>Exception check:</strong> {inv_exception}</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="inv-note">Snapshot-aware inventory view \u00b7 '
-        'no cross-date aggregation \u00b7 each date represents its own inventory position.</div>',
+        '<div class="inv-note">Snapshot-aware inventory view · '
+        'no cross-date aggregation · each date represents its own inventory position.</div>',
         unsafe_allow_html=True,
     )
 else:
@@ -669,24 +707,36 @@ def fmt_pct_html(val):
 
 def fmt_sig_html(n):
     if n is None or pd.isna(n):
-        return '<span class="pt-miss">\u2014</span>'
+        return '<span class="pt-miss">—</span>'
     n = int(n)
     if n == 0:
-        return '<span class="pt-sig ok">\u2713 None</span>'
+        return '<span class="pt-sig ok">✓ None</span>'
     if n == 1:
-        return '<span class="pt-sig watch">\u25b3 1 signal</span>'
-    return f'<span class="pt-sig high">\u25cf {n} signals</span>'
+        return '<span class="pt-sig watch">△ 1 signal</span>'
+    return f'<span class="pt-sig high">● {n} signals</span>'
+
+
+def fmt_attention_html(n):
+    if n is None or pd.isna(n):
+        return '<span class="pt-state">—</span>'
+    n = int(n)
+    if n >= 2:
+        return '<span class="pt-state high">High Risk</span>'
+    if n == 1:
+        return '<span class="pt-state watch">Watchlist</span>'
+    return '<span class="pt-state ok">Healthy</span>'
 
 
 table_rows = ""
-for _, row in risk_df.iterrows():
+for _, row in priority_df.iterrows():
     table_rows += (
         f'<tr>'
         f'<td><span class="pt-prod">{row["PRODUCT_ID"]}</span> {row["PRODUCT_NAME"]}</td>'
+        f'<td>{fmt_attention_html(row.get("RISK_SIGNAL_COUNT"))}</td>'
+        f'<td>{fmt_sig_html(row.get("RISK_SIGNAL_COUNT"))}</td>'
         f'<td>{fmt_pct_html(row.get("FULFILLMENT_RATE"))}</td>'
         f'<td>{fmt_pct_html(row.get("ON_TIME_DELIVERY_RATE"))}</td>'
         f'<td>{fmt_pct_html(row.get("PRODUCTION_ATTAINMENT"))}</td>'
-        f'<td>{fmt_sig_html(row.get("RISK_SIGNAL_COUNT"))}</td>'
         f'</tr>'
     )
 
@@ -695,8 +745,8 @@ if table_rows:
     <div class="pt-surface">
         <table class="pt-table">
             <thead><tr>
-                <th>Product</th><th>Fulfillment</th><th>On-Time Delivery</th>
-                <th>Production</th><th style="text-align:right">Risk Signals</th>
+                <th>Product</th><th>Attention</th><th>Signal Evidence</th>
+                <th>Fulfillment</th><th>On-Time Delivery</th><th>Production</th>
             </tr></thead>
             <tbody>{table_rows}</tbody>
         </table>
@@ -797,17 +847,21 @@ def render_governed_result(entry, governance=None):
     if parsed["text"]:
         st.markdown('<div class="inv-section-label">Finding</div>', unsafe_allow_html=True)
         st.markdown(parsed["text"])
-
-    if parsed["warnings"]:
-        with st.expander(f"Analyst advisories · {len(parsed['warnings'])}", expanded=False):
-            for warning in parsed["warnings"]:
-                st.caption(str(warning))
+    elif entry.get("df") is not None and not entry["df"].empty:
+        st.markdown('<div class="inv-section-label">Finding</div>', unsafe_allow_html=True)
+        st.caption("The governed query returned results; see the evidence below.")
 
     if entry.get("df") is not None and not entry["df"].empty:
         st.markdown('<div class="inv-section-label">Results</div>', unsafe_allow_html=True)
         st.dataframe(entry["df"], use_container_width=True, hide_index=True)
     elif parsed["sql"]:
         st.caption("Query returned no results.")
+
+    if parsed["warnings"]:
+        with st.expander(f"Analyst diagnostics · {len(parsed['warnings'])}", expanded=False):
+            st.caption("Technical advisories from Cortex Analyst are shown here separately from the business finding.")
+            for warning in parsed["warnings"]:
+                st.caption(str(warning))
 
     with st.expander("View generated SQL"):
         if parsed["sql"]:
@@ -938,17 +992,17 @@ for i, ch in enumerate(challenges):
                 st.error(f"Cortex Analyst error: {e}")
 
 # Permanent governance proof points — concise and reviewer-friendly.
-st.markdown('<div class="inv-section-label">Governance controls</div>', unsafe_allow_html=True)
-st.markdown("""
-<div class="gov-badges">
-    <span class="gb">✓ Snowflake Semantic View</span>
-    <span class="gb">✓ Verified Query Repository</span>
-    <span class="gb">✓ Independent Analytical Surfaces</span>
-    <span class="gb">✓ No Unsupported Fact-to-Fact Joins</span>
-    <span class="gb">✓ No Unsupported Causal Inference</span>
-    <span class="gb">✓ Semi-Additive Inventory Handling</span>
-</div>
-""", unsafe_allow_html=True)
+with st.expander("Governance controls · 6 active", expanded=False):
+    st.markdown("""
+    <div class="gov-badges">
+        <span class="gb">✓ Snowflake Semantic View</span>
+        <span class="gb">✓ Verified Query Repository</span>
+        <span class="gb">✓ Independent Analytical Surfaces</span>
+        <span class="gb">✓ No Unsupported Fact-to-Fact Joins</span>
+        <span class="gb">✓ No Unsupported Causal Inference</span>
+        <span class="gb">✓ Semi-Additive Inventory Handling</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 with st.expander("How ChainLoom reasons"):
