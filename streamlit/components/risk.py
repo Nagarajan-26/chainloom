@@ -137,6 +137,5 @@ def render_product_risk_panel(df):
     )
 
     st.caption(
-        "Risk signals represent independent observed indicators. "
-        "A missing metric is shown as unavailable rather than interpreted as zero."
+        "Independent observed indicators · missing metrics remain unavailable and are not interpreted as zero."
     )

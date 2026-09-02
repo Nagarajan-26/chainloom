@@ -152,6 +152,13 @@ def run_analyst_sql(sql: str):
     return session.sql(sql).to_pandas()
 
 
+def _advisory_text(warning):
+    """Convert Cortex advisory payloads into concise user-facing text."""
+    if isinstance(warning, dict):
+        return str(warning.get("message") or warning.get("error") or warning)
+    return str(warning)
+
+
 # ============================================================
 # ChainLoom — Enterprise Control Tower UI
 # Visual layer only. Functional/service logic above is unchanged.
@@ -678,9 +685,9 @@ suggestions = [
     "Which suppliers have the highest defect rate?",
 ]
 
-st.caption("Suggested investigations")
+st.caption("Suggested investigations · click one to prefill the question")
 
-cols = st.columns(4)
+cols = st.columns(4, gap="small")
 for i, suggestion in enumerate(suggestions):
     with cols[i]:
         st.button(
@@ -691,6 +698,9 @@ for i, suggestion in enumerate(suggestions):
             args=(suggestion,),
         )
 
+if st.session_state.get("analyst_input"):
+    st.caption("Question ready · edit it if needed, then run the investigation.")
+
 question = st.text_input(
     "Ask ChainLoom",
     key="analyst_input",
@@ -698,11 +708,11 @@ question = st.text_input(
     label_visibility="collapsed",
 )
 
-ask_col, clear_col = st.columns([1, 5])
+ask_col, helper_col = st.columns([1, 5], gap="medium")
 with ask_col:
     ask = st.button("Investigate", type="primary", key="investigate_button", use_container_width=True)
-with clear_col:
-    st.caption("Responses are grounded in the ChainLoom semantic view and governed analytical surfaces.")
+with helper_col:
+    st.caption("Grounded in the ChainLoom semantic view and governed analytical surfaces.")
 
 if ask:
     clean_question = question.strip()
@@ -771,8 +781,10 @@ for entry in reversed(st.session_state["analyst_results"]):
             unsafe_allow_html=True,
         )
 
-    for warning in parsed["warnings"]:
-        st.warning(warning)
+    if parsed["warnings"]:
+        with st.expander(f"Analyst advisories · {len(parsed['warnings'])}", expanded=False):
+            for warning in parsed["warnings"]:
+                st.caption(_advisory_text(warning))
 
     if entry["df"] is not None:
         if not entry["df"].empty:
@@ -862,8 +874,10 @@ for i, ch in enumerate(challenges):
                     if parsed["text"]:
                         st.markdown(parsed["text"])
 
-                    for warning in parsed["warnings"]:
-                        st.warning(warning)
+                    if parsed["warnings"]:
+                        with st.expander(f"Analyst advisories · {len(parsed['warnings'])}", expanded=False):
+                            for warning in parsed["warnings"]:
+                                st.caption(_advisory_text(warning))
 
                     if parsed["sql"]:
                         df = run_analyst_sql(parsed["sql"])
