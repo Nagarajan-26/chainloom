@@ -150,7 +150,7 @@ refresh_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
 high_risk_count = int((risk_df["RISK_SIGNAL_COUNT"] >= 2).sum())
 watchlist_count = int((risk_df["RISK_SIGNAL_COUNT"] == 1).sum())
 healthy_count = int((risk_df["RISK_SIGNAL_COUNT"] == 0).sum())
-monitored_count = len(risk_df)
+monitored_count = int(risk_df["PRODUCT_ID"].nunique()) if "PRODUCT_ID" in risk_df.columns else len(risk_df)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -392,7 +392,7 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystem
 .pt-table tr:last-child td { border-bottom: none; }
 .pt-prod { font-weight: 600; color: #1E293B; }
 .pt-pct { font-variant-numeric: tabular-nums; }
-.pt-miss { color: #CBD5E1; }
+.pt-miss { color: #94A3B8; } .pt-miss small { font-size: 0.56rem; color: #CBD5E1; }
 .pt-sig {
     display: inline-flex; align-items: center; gap: 4px;
     font-size: 0.68rem; font-weight: 600; border-radius: 4px;
@@ -401,6 +401,36 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystem
 .pt-sig.high { background: #FEF2F2; color: #DC2626; }
 .pt-sig.watch { background: #FFF7ED; color: #D97706; }
 .pt-sig.ok { background: #F0FDF4; color: #059669; }
+
+/* ── Governance posture ────────────────────────────────── */
+.gov-overview {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.45rem;
+    background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px;
+    padding: 0.65rem; margin-bottom: 0.7rem;
+}
+.gov-metric { padding: 0.45rem 0.55rem; border-right: 1px solid #F1F5F9; min-width: 0; }
+.gov-metric:last-child { border-right: none; }
+.gov-kicker { font-size: 0.52rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: #94A3B8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gov-value { font-size: 0.78rem; font-weight: 700; color: #334155; margin-top: 0.16rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gov-value.ok { color: #059669; }
+.gov-value.lock { color: #2563EB; }
+.boundary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.65rem; }
+.boundary-card {
+    background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px;
+    padding: 0.75rem 0.8rem; min-height: 118px;
+}
+.boundary-head { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; margin-bottom: 0.35rem; }
+.boundary-type { font-size: 0.52rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; }
+.boundary-state { font-size: 0.5rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 3px; padding: 2px 5px; background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
+.boundary-q { font-size: 0.73rem; font-weight: 600; color: #334155; line-height: 1.35; margin-bottom: 0.5rem; }
+.boundary-meta { font-size: 0.6rem; color: #94A3B8; line-height: 1.35; }
+@media (max-width: 1100px) {
+    .gov-overview { grid-template-columns: repeat(3, 1fr); }
+    .gov-metric:nth-child(3) { border-right: none; }
+}
+@media (max-width: 800px) {
+    .boundary-grid { grid-template-columns: 1fr; }
+}
 
 /* ── Footer ─────────────────────────────────────────────── */
 .cl-footer {
@@ -633,7 +663,7 @@ st.markdown('<div class="sec-label">Product Risk Intelligence</div>', unsafe_all
 
 def fmt_pct_html(val):
     if val is None or pd.isna(val):
-        return '<span class="pt-miss">\u2014</span>'
+        return '<span class="pt-miss">— <small>unavailable</small></span>'
     return f'<span class="pt-pct">{val:.0%}</span>'
 
 
@@ -811,7 +841,23 @@ for entry in reversed(st.session_state.analyst_results):
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("")
 st.markdown('<div class="sec-label">Trust &amp; Governance</div>', unsafe_allow_html=True)
-st.caption("Challenge ChainLoom's analytical boundaries using the same governed investigation pattern.")
+st.caption("Live governance posture for the analytical model, followed by three boundary checks that can be tested on demand.")
+
+# Enterprise posture: persistent, scannable controls rather than a static demo-style block.
+gov_overview = [
+    ("Semantic Layer", "CONNECTED", "ok"),
+    ("Verified Queries", "13", "ok"),
+    ("Fact-to-Fact Joins", "BLOCKED", "lock"),
+    ("Causal Inference", "BLOCKED", "lock"),
+    ("Inventory Grain", "SNAPSHOT", "ok"),
+    ("Missing Values", "PRESERVED", "ok"),
+]
+gov_cells = "".join(
+    f'<div class="gov-metric"><div class="gov-kicker">{label}</div>'
+    f'<div class="gov-value {cls}">{value}</div></div>'
+    for label, value, cls in gov_overview
+)
+st.markdown(f'<div class="gov-overview">{gov_cells}</div>', unsafe_allow_html=True)
 
 challenges = [
     {
@@ -819,8 +865,8 @@ challenges = [
         "badge": "Causal Boundary",
         "label": "Can P104 shortage be proven as the cause?",
         "question": "Did Part P104 inventory shortages cause production constraints last month?",
-        "can": "P104 BOM exposure and observed production constraints can be independently reported.",
-        "cannot": "Causation cannot be established. P104_EXPOSURE_FLAG indicates BOM dependency, not proof of shortage. Inventory and production are separate fact tables with no fact-to-fact join.",
+        "can": "BOM exposure and production constraints can be independently reported.",
+        "cannot": "Causation cannot be established without a valid linkage between the inventory and production surfaces.",
         "state": "BOUNDARY ENFORCED",
         "state_cls": "enforced",
     },
@@ -829,35 +875,37 @@ challenges = [
         "badge": "Attribution Boundary",
         "label": "Can supplier delay be proven as the cause?",
         "question": "Which supplier delivery delays directly caused late shipments to our Strategic customers?",
-        "can": "Supplier delays and customer shipment delays can be independently observed from their respective analytical surfaces.",
-        "cannot": "Direct supplier-to-customer causation cannot be established. Lot/batch genealogy is unavailable, so no linkage exists between a specific supplier receipt and a specific customer shipment.",
+        "can": "Supplier and shipment delays can be independently observed.",
+        "cannot": "Direct supplier-to-customer causation cannot be established because lot/batch genealogy is unavailable.",
         "state": "BOUNDARY ENFORCED",
         "state_cls": "enforced",
     },
     {
         "badge_cls": "signals",
-        "badge": "Independent Signals",
+        "badge": "Signal Interpretation",
         "label": "Can multiple risk signals be combined without inventing causality?",
         "question": "Which products currently show multiple independent supply-chain risk signals across fulfillment, delivery, and production?",
-        "can": "Multiple independent product risk signals can be reported. RISK_SIGNAL_COUNT counts co-occurring threshold breaches across fulfillment, delivery, and production.",
-        "cannot": "A weighted or composite causal risk score cannot be created. Signals are independently observed; co-occurrence does not imply causation.",
+        "can": "Independent threshold breaches can be reported at product level.",
+        "cannot": "Co-occurrence does not justify a weighted or causal risk score.",
         "state": "GOVERNED",
         "state_cls": "verified",
     },
 ]
 
-# Keep the three boundary choices compact and scannable.
-ch_cols = st.columns(3)
+st.markdown('<div class="inv-section-label">Boundary checks</div>', unsafe_allow_html=True)
+ch_cols = st.columns(3, gap="medium")
 for i, ch in enumerate(challenges):
     with ch_cols[i]:
         st.markdown(
-            f'<div class="tc">'
-            f'<div class="tc-badge {ch["badge_cls"]}">{ch["badge"]}</div>'
-            f'<div class="tc-q">{ch["label"]}</div>'
+            f'<div class="boundary-card">'
+            f'<div class="boundary-head"><span class="boundary-type">{ch["badge"]}</span>'
+            f'<span class="boundary-state">{ch["state"]}</span></div>'
+            f'<div class="boundary-q">{ch["label"]}</div>'
+            f'<div class="boundary-meta">Test the governed boundary against Cortex Analyst.</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
-        if st.button("Run Challenge", key=f"ch_{i}", use_container_width=True):
+        if st.button("Test Boundary", key=f"ch_{i}", use_container_width=True):
             st.session_state[f"_run_challenge_{i}"] = True
 
 # Render a selected governance challenge using the same Question → Finding → Results
@@ -866,7 +914,7 @@ for i, ch in enumerate(challenges):
     if st.session_state.get(f"_run_challenge_{i}"):
         st.session_state[f"_run_challenge_{i}"] = False
 
-        with st.spinner("Running governance challenge..."):
+        with st.spinner("Running governance boundary check..."):
             try:
                 raw = call_analyst(ch["question"])
                 parsed = parse_analyst_response(raw)
@@ -901,6 +949,7 @@ st.markdown("""
     <span class="gb">✓ Semi-Additive Inventory Handling</span>
 </div>
 """, unsafe_allow_html=True)
+
 
 with st.expander("How ChainLoom reasons"):
     st.markdown("""
