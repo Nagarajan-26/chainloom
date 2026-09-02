@@ -1,682 +1,655 @@
+import streamlit as st
 import json
 import os
-import urllib.error
-import urllib.request
-from datetime import datetime
-
 import pandas as pd
-import streamlit as st
-
-# PASS 1 — visual system only. Functional/service logic is unchanged.
-
-from components.risk import (
-    render_priority_attention,
-    render_product_risk_panel,
-)
-from services.analytics import fetch_control_tower_summary
-from services.snowflake import fetch_product_risk_signals
-
-
-# ============================================================
-# Page configuration
-# ============================================================
+from datetime import datetime
 
 st.set_page_config(
     page_title="ChainLoom | Control Tower",
     page_icon="🔗",
     layout="wide",
-    initial_sidebar_state="collapsed",
 )
 
+# ── Snowflake session ──────────────────────────────────────────────────────
+conn = st.connection("snowflake", ttl=os.getenv("SNOWFLAKE_CONNECTION_TTL"))
+session = conn.session()
 
-# ============================================================
-# Cortex Analyst — Snowflake Container Runtime
-# ============================================================
-
+# ── Cortex Analyst helper ──────────────────────────────────────────────────
 SEMANTIC_VIEW = "CHAINLOOM.SEMANTIC.CHAINLOOM_ANALYTICS"
 
 
-def _get_session_token() -> str:
-    token_path = "/snowflake/session/token"
-    if not os.path.exists(token_path):
-        raise RuntimeError(
-            "Snowflake session token is unavailable. "
-            "This app must run in Snowflake Container Runtime."
-        )
-    with open(token_path, "r", encoding="utf-8") as f:
-        token = f.read().strip()
-    if not token:
-        raise RuntimeError("Snowflake session token is empty.")
-    return token
+def call_analyst(question: str, history: list | None = None) -> dict:
+    import _snowflake
 
-
-def call_analyst(question: str, history=None) -> dict:
-    """Call Cortex Analyst through the Container Runtime REST endpoint.
-
-    Uses urllib from the Python standard library so no new dependency is
-    required in requirements.txt.
-    """
-    host = os.getenv("SNOWFLAKE_HOST")
-    if not host:
-        raise RuntimeError(
-            "SNOWFLAKE_HOST is not available in the Streamlit Container Runtime."
-        )
-
-    messages = list(history or [])
-    messages.append(
-        {"role": "user", "content": [{"type": "text", "text": question}]}
-    )
-
-    body = json.dumps(
-        {"messages": messages, "semantic_view": SEMANTIC_VIEW}
-    ).encode("utf-8")
-
-    req = urllib.request.Request(
-        f"https://{host}/api/v2/cortex/analyst/message",
-        data=body,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"Bearer {_get_session_token()}",
-            "X-Snowflake-Authorization-Token-Type": "OAUTH",
-        },
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=120) as response:
-            raw = response.read().decode("utf-8")
-            result = json.loads(raw)
-            request_id = (
-                result.get("request_id")
-                or response.headers.get("X-Snowflake-Request-ID")
-                or response.headers.get("X-Snowflake-Request-Id")
-            )
-            if request_id and not result.get("request_id"):
-                result["request_id"] = request_id
-            return result
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(
-            f"Cortex Analyst HTTP {exc.code}: {detail[:1000]}"
-        ) from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(
-            f"Unable to reach Cortex Analyst: {exc.reason}"
-        ) from exc
+    if history is None:
+        messages = [{"role": "user", "content": [{"type": "text", "text": question}]}]
+    else:
+        messages = history + [
+            {"role": "user", "content": [{"type": "text", "text": question}]}
+        ]
+    request_body = {"messages": messages, "semantic_view": SEMANTIC_VIEW}
+    resp = _snowflake.send_message("analyst", request_body)
+    return json.loads(resp)
 
 
 def parse_analyst_response(resp: dict) -> dict:
-    result = {
-        "text": "",
-        "sql": "",
-        "warnings": [],
-        "request_id": resp.get("request_id", ""),
-    }
-
+    result = {"text": "", "sql": "", "warnings": [], "request_id": resp.get("request_id", "")}
     message = resp.get("message", resp)
-    content = message.get("content", []) if isinstance(message, dict) else []
-
-    if content:
-        for item in content:
-            if item.get("type") == "text":
-                result["text"] += item.get("text", "")
-            elif item.get("type") == "sql":
-                result["sql"] = item.get("statement", "")
-    elif isinstance(resp.get("result"), str):
+    content_items = message.get("content", []) if isinstance(message, dict) else []
+    if not content_items and "result" in resp:
         raw = resp["result"]
         if "```sql" in raw:
-            before, after = raw.split("```sql", 1)
-            result["text"] = before.strip()
-            result["sql"] = after.split("```", 1)[0].strip()
+            parts = raw.split("```sql")
+            result["text"] = parts[0].strip()
+            result["sql"] = parts[1].split("```")[0].strip()
         else:
-            result["text"] = raw.strip()
-
-    warnings = resp.get("warnings", [])
-    if isinstance(warnings, list):
-        result["warnings"] = warnings
-
+            result["text"] = raw
+        return result
+    for item in content_items:
+        if item.get("type") == "text":
+            result["text"] += item.get("text", "")
+        elif item.get("type") == "sql":
+            result["sql"] = item.get("statement", "")
+    if "warnings" in resp:
+        result["warnings"] = resp["warnings"]
+    if "request_id" in resp:
+        result["request_id"] = resp["request_id"]
     return result
 
 
-def run_analyst_sql(sql: str):
+def run_analyst_sql(sql: str) -> pd.DataFrame | None:
     if not sql or not sql.strip():
         return None
-
-    # Reuse the application's existing Snowflake connection.
-    conn = st.connection(
-        "snowflake",
-        ttl=os.getenv("SNOWFLAKE_CONNECTION_TTL"),
-    )
-    session = conn.session()
-    return session.sql(sql).to_pandas()
+    try:
+        return session.sql(sql).to_pandas()
+    except Exception as e:
+        st.error(f"Query execution error: {e}")
+        return None
 
 
-def _advisory_text(warning):
-    """Convert Cortex advisory payloads into concise user-facing text."""
-    if isinstance(warning, dict):
-        return str(warning.get("message") or warning.get("error") or warning)
-    return str(warning)
+# ── Data loaders ───────────────────────────────────────────────────────────
+@st.cache_data(ttl=120)
+def load_risk_signals():
+    return session.sql(
+        "SELECT * FROM CHAINLOOM.CURATED.V_PRODUCT_RISK_SIGNALS ORDER BY RISK_SIGNAL_COUNT DESC"
+    ).to_pandas()
 
 
-# ============================================================
-# ChainLoom — Enterprise Control Tower UI
-# Visual layer only. Functional/service logic above is unchanged.
-# ============================================================
-
-st.markdown(
-    """
-    <style>
-    :root {
-        --cl-ink:#0B1220;
-        --cl-text:#334155;
-        --cl-muted:#64748B;
-        --cl-subtle:#94A3B8;
-        --cl-border:#E2E8F0;
-        --cl-border-strong:#CBD5E1;
-        --cl-surface:#FFFFFF;
-        --cl-canvas:#F7F9FC;
-        --cl-blue:#2563EB;
-        --cl-blue-soft:#EFF6FF;
-        --cl-cyan:#29B5E8;
-        --cl-green:#047857;
-        --cl-green-soft:#ECFDF5;
-        --cl-red:#B91C1C;
-        --cl-red-soft:#FEF2F2;
-        --cl-amber:#B45309;
-        --cl-amber-soft:#FFFBEB;
-    }
-
-    .stApp {
-        background:
-            radial-gradient(circle at 8% 0%, rgba(37,99,235,.045), transparent 30rem),
-            var(--cl-canvas);
-        color:var(--cl-text);
-    }
-
-    .block-container {
-        max-width:1480px;
-        padding-top:1.15rem;
-        padding-bottom:3rem;
-    }
-
-    html, body, [class*="css"] {
-        font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-    }
-
-    h1,h2,h3,h4 { color:var(--cl-ink); letter-spacing:-.025em; }
-
-    /* ---------- Header ---------- */
-    .cl-header {
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        gap:1.5rem;
-        background:rgba(255,255,255,.97);
-        border:1px solid var(--cl-border);
-        border-radius:14px;
-        padding:.95rem 1.1rem;
-        margin-bottom:1rem;
-        box-shadow:0 1px 3px rgba(15,23,42,.035);
-    }
-
-    .cl-brand {
-        display:flex;
-        align-items:center;
-        gap:13px;
-        min-width:0;
-    }
-
-    .cl-mark {
-        width:42px;
-        height:42px;
-        position:relative;
-        flex:none;
-        border-radius:11px;
-        background:var(--cl-blue-soft);
-        border:1px solid #DBEAFE;
-    }
-
-    .cl-node {
-        position:absolute;
-        width:8px;
-        height:8px;
-        border-radius:50%;
-        background:var(--cl-cyan);
-        box-shadow:0 0 0 3px rgba(41,181,232,.10);
-    }
-
-    .cl-n1{top:5px;left:17px}.cl-n2{top:17px;left:5px}
-    .cl-n3{top:17px;left:29px}.cl-n4{top:29px;left:17px}
-
-    .cl-link {
-        position:absolute;
-        height:1.5px;
-        width:17px;
-        background:#CBD5E1;
-        transform-origin:left center;
-    }
-
-    .cl-l1{top:9px;left:21px;transform:rotate(45deg)}
-    .cl-l2{top:9px;left:17px;transform:rotate(135deg)}
-    .cl-l3{top:21px;left:9px;transform:rotate(45deg)}
-    .cl-l4{top:21px;left:21px;transform:rotate(135deg)}
-
-    .cl-eyebrow {
-        font-size:.60rem;
-        font-weight:800;
-        letter-spacing:.16em;
-        text-transform:uppercase;
-        color:var(--cl-muted);
-    }
-
-    .cl-title {
-        font-size:1.42rem;
-        line-height:1.05;
-        font-weight:800;
-        color:var(--cl-ink);
-        margin-top:.06rem;
-    }
-
-    .cl-subtitle {
-        font-size:.70rem;
-        color:var(--cl-subtle);
-        margin-top:.18rem;
-    }
-
-    .cl-live {
-        white-space:nowrap;
-        font-size:.60rem;
-        color:var(--cl-green);
-        background:var(--cl-green-soft);
-        border:1px solid #A7F3D0;
-        border-radius:999px;
-        padding:6px 10px;
-        font-weight:800;
-        letter-spacing:.055em;
-    }
-
-    /* ---------- Section hierarchy ---------- */
-    .cl-section {
-        margin:1.15rem 0 .55rem;
-    }
-
-    .cl-section-kicker {
-        font-size:.59rem;
-        font-weight:800;
-        letter-spacing:.14em;
-        text-transform:uppercase;
-        color:var(--cl-blue);
-    }
-
-    .cl-section-title {
-        font-size:1.05rem;
-        line-height:1.2;
-        font-weight:800;
-        color:var(--cl-ink);
-        margin-top:.16rem;
-    }
-
-    .cl-section-sub {
-        font-size:.72rem;
-        color:var(--cl-muted);
-        margin-top:.12rem;
-    }
-
-    /* ---------- KPI cards ---------- */
-    div[data-testid="stMetric"] {
-        background:var(--cl-surface);
-        border:1px solid var(--cl-border);
-        border-radius:11px;
-        padding:.82rem .95rem .72rem;
-        min-height:88px;
-        box-shadow:0 1px 2px rgba(15,23,42,.025);
-    }
-
-    div[data-testid="stMetricLabel"] {
-        color:var(--cl-muted);
-        font-size:.66rem;
-        font-weight:700;
-    }
-
-    div[data-testid="stMetricValue"] {
-        color:var(--cl-ink);
-        font-size:1.62rem;
-        line-height:1.05;
-        font-weight:800;
-        letter-spacing:-.035em;
-    }
-
-    /* ---------- Surfaces ---------- */
-    .cl-surface {
-        background:var(--cl-surface);
-        border:1px solid var(--cl-border);
-        border-radius:12px;
-        padding:1rem 1.1rem;
-        box-shadow:0 1px 2px rgba(15,23,42,.025);
-    }
-
-    .cl-pulse {
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        gap:1rem;
-        flex-wrap:wrap;
-    }
-
-    .cl-pulse-main {
-        font-size:.84rem;
-        color:var(--cl-text);
-    }
-
-    .cl-pulse-main b { color:var(--cl-ink); }
-
-    .cl-refresh {
-        font-size:.61rem;
-        color:var(--cl-subtle);
-    }
-
-    /* ---------- AI console ---------- */
-    .cl-ai {
-        background:var(--cl-surface);
-        border:1px solid #BFDBFE;
-        border-top:3px solid var(--cl-blue);
-        border-radius:13px;
-        padding:1rem 1.15rem .85rem;
-        margin-top:.75rem;
-        box-shadow:0 3px 12px rgba(37,99,235,.045);
-    }
-
-    .cl-ai-kicker {
-        font-size:.59rem;
-        font-weight:800;
-        letter-spacing:.11em;
-        color:var(--cl-blue);
-        text-transform:uppercase;
-    }
-
-    .cl-ai-title {
-        font-size:1.18rem;
-        line-height:1.2;
-        font-weight:800;
-        color:var(--cl-ink);
-        margin:.18rem 0 .20rem;
-    }
-
-    .cl-ai-sub {
-        font-size:.74rem;
-        color:var(--cl-muted);
-        line-height:1.45;
-    }
-
-    .stButton > button {
-        border-radius:9px;
-        min-height:2.35rem;
-        border:1px solid var(--cl-border-strong);
-        font-weight:650;
-        color:var(--cl-text);
-        background:#FFFFFF;
-        transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease;
-    }
-
-    .stButton > button:hover {
-        border-color:#93C5FD;
-        box-shadow:0 3px 10px rgba(37,99,235,.08);
-        transform:translateY(-1px);
-    }
-
-    .stButton > button[kind="primary"] {
-        background:var(--cl-blue);
-        border-color:var(--cl-blue);
-        color:#FFFFFF;
-    }
-
-    div[data-testid="stTextInput"] input {
-        border:1px solid var(--cl-border-strong);
-        border-radius:10px;
-        background:#FFFFFF;
-        color:var(--cl-ink);
-        min-height:2.65rem;
-    }
-
-    div[data-testid="stTextInput"] input:focus {
-        border-color:#60A5FA;
-        box-shadow:0 0 0 3px rgba(37,99,235,.10);
-    }
-
-    /* ---------- Investigation ---------- */
-    .cl-investigation {
-        background:#FFFFFF;
-        border:1px solid var(--cl-border);
-        border-radius:12px;
-        padding:.95rem 1.05rem;
-        margin:.85rem 0;
-        box-shadow:0 1px 2px rgba(15,23,42,.02);
-    }
-
-    .cl-investigation-tag {
-        font-size:.57rem;
-        font-weight:800;
-        letter-spacing:.10em;
-        text-transform:uppercase;
-        color:var(--cl-blue);
-    }
-
-    .cl-investigation-question {
-        font-size:.91rem;
-        font-weight:700;
-        line-height:1.4;
-        color:var(--cl-ink);
-        margin-top:.24rem;
-    }
-
-    .cl-finding {
-        border-left:3px solid #93C5FD;
-        background:#F8FAFC;
-        border-radius:0 8px 8px 0;
-        padding:.75rem .85rem;
-        margin:.65rem 0;
-        font-size:.80rem;
-        line-height:1.55;
-    }
-
-    /* ---------- Governance ---------- */
-    .cl-gov-good {
-        background:var(--cl-green-soft);
-        border-left:3px solid #22C55E;
-        padding:.58rem .78rem;
-        border-radius:0 7px 7px 0;
-        font-size:.74rem;
-        color:#166534;
-        margin-top:.4rem;
-        line-height:1.45;
-    }
-
-    .cl-gov-bad {
-        background:var(--cl-red-soft);
-        border-left:3px solid #EF4444;
-        padding:.58rem .78rem;
-        border-radius:0 7px 7px 0;
-        font-size:.74rem;
-        color:#991B1B;
-        margin-top:.4rem;
-        line-height:1.45;
-    }
-
-    .cl-gov-badge {
-        display:inline-block;
-        font-size:.57rem;
-        color:#166534;
-        background:#F0FDF4;
-        border:1px solid #BBF7D0;
-        border-radius:999px;
-        padding:4px 8px;
-        margin:.2rem .25rem .2rem 0;
-        font-weight:650;
-    }
-
-    .cl-footer {
-        text-align:center;
-        color:#94A3B8;
-        font-size:.60rem;
-        border-top:1px solid var(--cl-border);
-        margin-top:2.2rem;
-        padding:1rem;
-        line-height:1.6;
-    }
-
-    @media (max-width:900px) {
-        .block-container { padding-top:.75rem; }
-        .cl-header { align-items:flex-start; }
-        .cl-live { font-size:.54rem; }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+@st.cache_data(ttl=120)
+def load_executive_kpis():
+    ff = session.sql(
+        "SELECT ROUND(100.0*SUM(FULFILLED_QUANTITY)/NULLIF(SUM(ORDERED_QUANTITY),0),1) AS V "
+        "FROM CHAINLOOM.CURATED.V_CUSTOMER_FULFILLMENT"
+    ).to_pandas().iloc[0, 0]
+    otd = session.sql(
+        "SELECT ROUND(100.0*COUNT_IF(ON_TIME_FLAG=TRUE)/NULLIF(COUNT_IF(DELIVERY_ELIGIBLE_FLAG=TRUE),0),1) AS V "
+        "FROM CHAINLOOM.CURATED.V_SHIPMENT_PERFORMANCE"
+    ).to_pandas().iloc[0, 0]
+    return ff, otd
 
 
-# ============================================================
-# Load governed live data
-# ============================================================
-
-try:
-    summary = fetch_control_tower_summary()
-    risk_df = fetch_product_risk_signals()
-except Exception as exc:
-    st.error("Unable to load ChainLoom data.")
-    st.exception(exc)
-    st.stop()
-
-high_risk = int((risk_df["RISK_SIGNAL_COUNT"].fillna(0) >= 2).sum())
-watchlist = int((risk_df["RISK_SIGNAL_COUNT"].fillna(0) == 1).sum())
-healthy = int((risk_df["RISK_SIGNAL_COUNT"].fillna(0) == 0).sum())
-products = len(risk_df)
-refresh_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+@st.cache_data(ttl=120)
+def load_inventory_trend():
+    return session.sql("""
+        SELECT SNAPSHOT_DATE,
+               SUM(AVAILABLE_QUANTITY) AS AVAILABLE_INVENTORY,
+               SUM(SAFETY_STOCK_QUANTITY) AS SAFETY_STOCK_LEVEL
+        FROM CHAINLOOM.CURATED.V_INVENTORY_POSITION
+        GROUP BY SNAPSHOT_DATE
+        ORDER BY SNAPSHOT_DATE
+    """).to_pandas()
 
 
-# ============================================================
-# Header
-# ============================================================
+risk_df = load_risk_signals()
+fulfillment_pct, otd_pct = load_executive_kpis()
+inv_trend_df = load_inventory_trend()
+refresh_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
 
-st.markdown(
-    """
-    <div class="cl-header">
-      <div class="cl-brand">
+high_risk_count = int((risk_df["RISK_SIGNAL_COUNT"] >= 2).sum())
+watchlist_count = int((risk_df["RISK_SIGNAL_COUNT"] == 1).sum())
+healthy_count = int((risk_df["RISK_SIGNAL_COUNT"] == 0).sum())
+monitored_count = len(risk_df)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CSS
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("""<style>
+/* ── Canvas ─────────────────────────────────────────────── */
+.stApp { background: #F6F8FB; }
+.block-container { padding-top: 1.0rem; padding-bottom: 1.5rem; max-width: 1440px; }
+section[data-testid="stSidebar"] { display: none; }
+html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
+
+/* ── Brand header ───────────────────────────────────────── */
+.cl-brand {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.8rem 0 0.7rem 0; border-bottom: 1px solid #E2E8F0; margin-bottom: 1rem;
+}
+.cl-brand-left { display: flex; align-items: center; gap: 14px; }
+.cl-mark {
+    width: 36px; height: 36px; position: relative; flex-shrink: 0;
+}
+.cl-mark .node {
+    width: 8px; height: 8px; background: #29B5E8; border-radius: 50%;
+    position: absolute;
+}
+.cl-mark .node.n1 { top: 0; left: 14px; }
+.cl-mark .node.n2 { top: 14px; left: 0; }
+.cl-mark .node.n3 { top: 14px; left: 28px; }
+.cl-mark .node.n4 { top: 28px; left: 14px; }
+.cl-mark .link {
+    position: absolute; background: #CBD5E1; transform-origin: 0 0;
+}
+.cl-mark .link.l1 { top: 4px; left: 18px; width: 16px; height: 1.5px; transform: rotate(45deg); }
+.cl-mark .link.l2 { top: 4px; left: 14px; width: 16px; height: 1.5px; transform: rotate(135deg); }
+.cl-mark .link.l3 { top: 18px; left: 4px; width: 16px; height: 1.5px; transform: rotate(45deg); }
+.cl-mark .link.l4 { top: 18px; left: 18px; width: 16px; height: 1.5px; transform: rotate(135deg); }
+.cl-brand-text {}
+.cl-brand-name {
+    font-size: 0.65rem; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #64748B; line-height: 1;
+}
+.cl-brand-title {
+    font-size: 1.25rem; font-weight: 700; color: #0F172A; letter-spacing: -0.01em;
+    line-height: 1.25; margin-top: 1px;
+}
+.cl-brand-subtitle {
+    font-size: 0.72rem; color: #94A3B8; line-height: 1.2; margin-top: 1px;
+}
+.cl-brand-right { display: flex; align-items: center; gap: 12px; }
+.cl-live {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.62rem; font-weight: 500; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #059669;
+    background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 4px;
+    padding: 3px 8px;
+}
+.cl-live .dot { width: 6px; height: 6px; background: #10B981; border-radius: 50%; }
+
+/* ── Metric strip ───────────────────────────────────────── */
+.m-strip {
+    display: flex; gap: 1px; background: #E2E8F0; border-radius: 8px;
+    overflow: hidden; margin-bottom: 1.1rem;
+}
+.m-cell {
+    flex: 1; background: #FFFFFF; padding: 0.7rem 0.5rem; text-align: center;
+    min-width: 0;
+}
+.m-cell:first-child { border-radius: 8px 0 0 8px; }
+.m-cell:last-child  { border-radius: 0 8px 8px 0; }
+.m-cell .ml {
+    font-size: 0.58rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.07em; color: #94A3B8; margin-bottom: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.m-cell .mv { font-size: 1.3rem; font-weight: 700; color: #0F172A; line-height: 1.2; }
+.m-cell .mv.g { color: #059669; } .m-cell .mv.w { color: #D97706; } .m-cell .mv.d { color: #DC2626; }
+.m-cell .md { font-size: 0.6rem; color: #94A3B8; margin-top: 1px; }
+
+/* ── Section label ──────────────────────────────────────── */
+.sec-label {
+    font-size: 0.6rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; color: #94A3B8; margin-bottom: 0.45rem;
+}
+
+/* ── Card surface ───────────────────────────────────────── */
+.surface {
+    background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px;
+    padding: 1rem 1.1rem;
+}
+
+/* ── Priority card ──────────────────────────────────────── */
+.pri-surface {
+    background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px;
+    padding: 1rem 1.1rem; border-left: 3px solid #F59E0B;
+}
+.pri-badge {
+    display: inline-block; font-size: 0.55rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 2px 7px; border-radius: 3px; margin-bottom: 0.5rem;
+}
+.pri-badge.high { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+.pri-badge.watch { background: #FFF7ED; color: #9A3412; border: 1px solid #FED7AA; }
+.pri-prod { font-size: 1.05rem; font-weight: 700; color: #1E293B; margin-bottom: 0.25rem; }
+.pri-sigs { font-size: 0.78rem; color: #64748B; margin-bottom: 0.4rem; }
+.pri-mets { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+.pri-met { font-size: 0.75rem; color: #475569; }
+.pri-met strong { font-weight: 700; color: #1E293B; }
+.pri-why { font-size: 0.72rem; color: #92400E; font-style: italic; margin-bottom: 0.35rem; }
+.pri-gov {
+    font-size: 0.65rem; color: #94A3B8; border-top: 1px solid #F1F5F9;
+    padding-top: 0.35rem; margin-top: 0.15rem;
+}
+
+/* ── Pulse panel ────────────────────────────────────────── */
+.pulse-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; }
+.pulse-cell {
+    background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 6px;
+    padding: 0.55rem 0.7rem; display: flex; align-items: baseline; gap: 6px;
+}
+.pulse-n { font-size: 1.15rem; font-weight: 700; color: #0F172A; line-height: 1; }
+.pulse-n.d { color: #DC2626; } .pulse-n.w { color: #D97706; } .pulse-n.g { color: #059669; }
+.pulse-l { font-size: 0.68rem; color: #64748B; }
+
+.pulse-table { width: 100%; border-collapse: collapse; margin-top: 0.65rem; }
+.pulse-table th {
+    font-size: 0.54rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #94A3B8; text-align: left;
+    padding: 0.38rem 0.2rem; border-bottom: 1px solid #E2E8F0;
+}
+.pulse-table th:last-child, .pulse-table td:last-child { text-align: right; }
+.pulse-table td {
+    font-size: 0.68rem; color: #475569; padding: 0.36rem 0.2rem;
+    border-bottom: 1px solid #F8FAFC;
+}
+.pulse-table tr:last-child td { border-bottom: none; }
+.pulse-share { font-variant-numeric: tabular-nums; color: #64748B; }
+.pulse-status { font-weight: 600; }
+.pulse-status.high { color: #DC2626; }
+.pulse-status.watch { color: #D97706; }
+.pulse-status.healthy { color: #059669; }
+.pt-miss {
+    display: inline-block; color: #64748B; background: #F8FAFC;
+    border: 1px solid #E2E8F0; border-radius: 4px; padding: 1px 6px;
+    font-size: 0.65rem; white-space: nowrap;
+}
+.pt-miss::after { content: " unavailable"; color: #94A3B8; font-weight: 500; }
+.pulse-ts {
+    font-size: 0.6rem; color: #CBD5E1; margin-top: 0.4rem; text-align: right;
+}
+
+/* ── Inventory panel ────────────────────────────────────── */
+.inv-note { font-size: 0.65rem; color: #94A3B8; font-style: italic; margin-top: 0.3rem; }
+
+/* ── AI console ─────────────────────────────────────────── */
+.ai-console {
+    background: #FFFFFF; border: 1px solid #BFDBFE; border-radius: 10px;
+    padding: 1.2rem 1.3rem; margin: 0.2rem 0 0.5rem 0;
+    border-top: 3px solid #3B82F6;
+}
+.ai-hdr {
+    font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.1em; color: #3B82F6; margin-bottom: 0.15rem;
+}
+.ai-title { font-size: 1.1rem; font-weight: 700; color: #1E293B; margin-bottom: 0.1rem; }
+.ai-sub { font-size: 0.75rem; color: #64748B; margin-bottom: 0.6rem; }
+
+/* ── Investigation result ───────────────────────────────── */
+.inv-card {
+    background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px;
+    padding: 1rem 1.1rem; margin: 0.5rem 0;
+}
+.inv-tag {
+    font-size: 0.55rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #3B82F6; margin-bottom: 0.3rem;
+}
+.inv-q { font-size: 0.9rem; font-weight: 600; color: #1E293B; margin-bottom: 0.5rem; }
+.inv-sep { border: none; border-top: 1px solid #F1F5F9; margin: 0.5rem 0; }
+.inv-section-label {
+    font-size: 0.58rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #94A3B8; margin: 0.5rem 0 0.25rem 0;
+}
+
+/* ── Trust cards ────────────────────────────────────────── */
+.tc {
+    background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px;
+    padding: 0.8rem 0.9rem; height: 100%;
+}
+.tc-badge {
+    display: inline-block; font-size: 0.52rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    border-radius: 3px; padding: 2px 6px; margin-bottom: 0.35rem;
+}
+.tc-badge.causal  { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+.tc-badge.attrib  { background: #FFF7ED; color: #9A3412; border: 1px solid #FED7AA; }
+.tc-badge.signals { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
+.tc-q { font-size: 0.78rem; font-weight: 600; color: #334155; line-height: 1.35; }
+
+/* ── Governance result ──────────────────────────────────── */
+.gov-state {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.58rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; border-radius: 3px; padding: 3px 8px; margin: 0.3rem 0;
+}
+.gov-state.enforced { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+.gov-state.verified { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
+.can-block {
+    background: #F0FDF4; border-left: 3px solid #22C55E; border-radius: 0 6px 6px 0;
+    padding: 0.55rem 0.8rem; margin: 0.3rem 0; font-size: 0.78rem; color: #166534;
+}
+.cannot-block {
+    background: #FEF2F2; border-left: 3px solid #EF4444; border-radius: 0 6px 6px 0;
+    padding: 0.55rem 0.8rem; margin: 0.3rem 0; font-size: 0.78rem; color: #991B1B;
+}
+
+/* ── Gov badges ─────────────────────────────────────────── */
+.gov-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
+.gb {
+    font-size: 0.62rem; font-weight: 500; background: #F0FDF4;
+    border: 1px solid #BBF7D0; border-radius: 4px;
+    padding: 2px 8px; color: #166534;
+}
+
+/* ── Product table ──────────────────────────────────────── */
+.pt-surface {
+    background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px;
+    padding: 0.8rem 1rem; overflow-x: auto;
+}
+.pt-table { width: 100%; border-collapse: collapse; }
+.pt-table th {
+    font-size: 0.58rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #94A3B8; text-align: left;
+    padding: 0.5rem 0.6rem; border-bottom: 1px solid #E2E8F0;
+}
+.pt-table th:last-child { text-align: right; }
+.pt-table td {
+    font-size: 0.8rem; color: #334155; padding: 0.55rem 0.6rem;
+    border-bottom: 1px solid #F8FAFC; vertical-align: middle;
+}
+.pt-table tr:last-child td { border-bottom: none; }
+.pt-prod { font-weight: 600; color: #1E293B; }
+.pt-pct { font-variant-numeric: tabular-nums; }
+.pt-miss { color: #CBD5E1; }
+.pt-sig {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.68rem; font-weight: 600; border-radius: 4px;
+    padding: 2px 7px; float: right;
+}
+.pt-sig.high { background: #FEF2F2; color: #DC2626; }
+.pt-sig.watch { background: #FFF7ED; color: #D97706; }
+.pt-sig.ok { background: #F0FDF4; color: #059669; }
+
+/* ── Footer ─────────────────────────────────────────────── */
+.cl-footer {
+    text-align: center; font-size: 0.62rem; color: #CBD5E1;
+    padding: 0.9rem 0 0.4rem 0; border-top: 1px solid #E2E8F0; margin-top: 1.4rem;
+}
+.cl-footer a { color: #94A3B8; text-decoration: none; }
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 900px) {
+    .m-strip { flex-wrap: wrap; }
+    .m-cell { flex: 1 1 30%; }
+    .pulse-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>""", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 3. BRAND HEADER
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown(f"""
+<div class="cl-brand">
+    <div class="cl-brand-left">
         <div class="cl-mark">
-          <div class="cl-node cl-n1"></div><div class="cl-node cl-n2"></div>
-          <div class="cl-node cl-n3"></div><div class="cl-node cl-n4"></div>
-          <div class="cl-link cl-l1"></div><div class="cl-link cl-l2"></div>
-          <div class="cl-link cl-l3"></div><div class="cl-link cl-l4"></div>
+            <div class="node n1"></div><div class="node n2"></div>
+            <div class="node n3"></div><div class="node n4"></div>
+            <div class="link l1"></div><div class="link l2"></div>
+            <div class="link l3"></div><div class="link l4"></div>
         </div>
-        <div>
-          <div class="cl-eyebrow">CHAINLOOM · SUPPLY CHAIN INTELLIGENCE</div>
-          <div class="cl-title">Control Tower</div>
-          <div class="cl-subtitle">Governed executive intelligence across the supply chain</div>
+        <div class="cl-brand-text">
+            <div class="cl-brand-name">ChainLoom</div>
+            <div class="cl-brand-title">Supply Chain Intelligence</div>
+            <div class="cl-brand-subtitle">Control Tower</div>
         </div>
-      </div>
-      <div class="cl-live">● LIVE SNOWFLAKE DATA</div>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-# ============================================================
-# Executive signals
-# ============================================================
-
-st.markdown(
-    """
-    <div class="cl-section">
-      <div class="cl-section-kicker">EXECUTIVE SIGNALS</div>
-      <div class="cl-section-title">Network health at a glance</div>
-      <div class="cl-section-sub">Current indicators from governed ChainLoom data</div>
+    <div class="cl-brand-right">
+        <span class="cl-live"><span class="dot"></span> Live Snowflake Data</span>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-k1, k2, k3, k4, k5 = st.columns(5)
-
-with k1:
-    st.metric("High-Risk Products", high_risk, help="Products with two or more independent risk signals.")
-with k2:
-    st.metric("Watchlist", watchlist, help="Products with exactly one active risk signal.")
-with k3:
-    st.metric("Products Monitored", products)
-with k4:
-    value = summary["FULFILLMENT_RATE"]
-    st.metric("Network Fulfillment", "—" if pd.isna(value) else f"{float(value)*100:.1f}%")
-with k5:
-    value = summary["ON_TIME_DELIVERY_RATE"]
-    st.metric("On-Time Delivery", "—" if pd.isna(value) else f"{float(value)*100:.1f}%")
+</div>
+""", unsafe_allow_html=True)
 
 
-# ============================================================
-# Priority attention + product risk
-# ============================================================
+# ══════════════════════════════════════════════════════════════════════════════
+# 4. EXECUTIVE KPI STRIP
+# ══════════════════════════════════════════════════════════════════════════════
+ff_c = "g" if fulfillment_pct and fulfillment_pct >= 90 else ("w" if fulfillment_pct and fulfillment_pct >= 80 else "d")
+ff_v = f"{fulfillment_pct}%" if fulfillment_pct is not None else "\u2014"
+otd_c = "g" if otd_pct and otd_pct >= 85 else ("w" if otd_pct and otd_pct >= 70 else "d")
+otd_v = f"{otd_pct}%" if otd_pct is not None else "\u2014"
 
-render_priority_attention(risk_df)
-render_product_risk_panel(risk_df)
-
-
-# ============================================================
-# Network pulse
-# ============================================================
-
-st.markdown(
-    """
-    <div class="cl-section">
-      <div class="cl-section-kicker">NETWORK PULSE</div>
-      <div class="cl-section-title">Current network posture</div>
+st.markdown(f"""
+<div class="m-strip">
+    <div class="m-cell">
+        <div class="ml">High-Risk Products</div>
+        <div class="mv{"  d" if high_risk_count > 0 else ""}">{high_risk_count}</div>
+        <div class="md">&ge;2 signals</div>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    f"""
-    <div class="cl-surface cl-pulse">
-      <div class="cl-pulse-main">
-        <b>{products}</b> monitored &nbsp;·&nbsp;
-        <b>{high_risk}</b> high-risk &nbsp;·&nbsp;
-        <b>{watchlist}</b> watchlist &nbsp;·&nbsp;
-        <b>{healthy}</b> healthy
-      </div>
-      <div class="cl-refresh">Refreshed {refresh_ts}</div>
+    <div class="m-cell">
+        <div class="ml">Watchlist</div>
+        <div class="mv{" w" if watchlist_count > 0 else ""}">{watchlist_count}</div>
+        <div class="md">1 signal</div>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-# ============================================================
-# Ask ChainLoom
-# ============================================================
-
-st.markdown(
-    """
-    <div class="cl-ai">
-      <div class="cl-ai-kicker">AI-ASSISTED INVESTIGATION</div>
-      <div class="cl-ai-title">Ask ChainLoom</div>
-      <div class="cl-ai-sub">Explore governed supply-chain intelligence using natural language.</div>
+    <div class="m-cell">
+        <div class="ml">Products Monitored</div>
+        <div class="mv">{monitored_count}</div>
+        <div class="md">across network</div>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
+    <div class="m-cell">
+        <div class="ml">Network Fulfillment</div>
+        <div class="mv {ff_c}">{ff_v}</div>
+        <div class="md">order fill rate</div>
+    </div>
+    <div class="m-cell">
+        <div class="ml">On-Time Delivery</div>
+        <div class="mv {otd_c}">{otd_v}</div>
+        <div class="md">delivered on/before promise</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 5. EXECUTIVE FOCUS — TWO COLUMN
+# ══════════════════════════════════════════════════════════════════════════════
+ef_left, ef_right = st.columns([65, 35], gap="medium")
+
+# ── LEFT: PRIORITY ATTENTION ──────────────────────────────────────────────
+with ef_left:
+    st.markdown('<div class="sec-label">Priority Attention</div>', unsafe_allow_html=True)
+
+    top = risk_df.iloc[0] if len(risk_df) > 0 and risk_df.iloc[0]["RISK_SIGNAL_COUNT"] > 0 else None
+
+    if top is not None:
+        sig_count = int(top["RISK_SIGNAL_COUNT"])
+        signals_list = []
+        if top.get("FULFILLMENT_RISK_FLAG"):
+            signals_list.append("Fulfillment")
+        if top.get("DELIVERY_RISK_FLAG"):
+            signals_list.append("Delivery")
+        if top.get("PRODUCTION_RISK_FLAG"):
+            signals_list.append("Production")
+        signal_text = " \u00b7 ".join(signals_list) if signals_list else "\u2014"
+
+        attention = "HIGH ATTENTION" if sig_count >= 2 else "WATCH"
+        badge_cls = "high" if sig_count >= 2 else "watch"
+
+        ff_rate = top.get("FULFILLMENT_RATE")
+        otd_rate = top.get("ON_TIME_DELIVERY_RATE")
+        prod_att = top.get("PRODUCTION_ATTAINMENT")
+
+        met_html = ""
+        if ff_rate is not None and pd.notna(ff_rate):
+            met_html += f'<div class="pri-met"><strong>{ff_rate:.0%}</strong> Fulfillment</div>'
+        if otd_rate is not None and pd.notna(otd_rate):
+            met_html += f'<div class="pri-met"><strong>{otd_rate:.0%}</strong> On-Time Delivery</div>'
+        if prod_att is not None and pd.notna(prod_att):
+            met_html += f'<div class="pri-met"><strong>{prod_att:.0%}</strong> Production Attainment</div>'
+
+        # Dynamically derive why surfaced — no composite language
+        why_parts = []
+        if top.get("FULFILLMENT_RISK_FLAG") and ff_rate is not None and pd.notna(ff_rate):
+            why_parts.append(f"fulfillment at {ff_rate:.0%}")
+        if top.get("DELIVERY_RISK_FLAG") and otd_rate is not None and pd.notna(otd_rate):
+            why_parts.append(f"on-time delivery at {otd_rate:.0%}")
+        if top.get("PRODUCTION_RISK_FLAG") and prod_att is not None and pd.notna(prod_att):
+            why_parts.append(f"production attainment at {prod_att:.0%}")
+        if len(why_parts) > 1:
+            primary = why_parts[0]
+            also = "; ".join(f"{p} is also below the network threshold" for p in why_parts[1:])
+            why_text = f"Why surfaced: {primary} is the lowest among products with {sig_count} independent signals; {also}."
+        elif len(why_parts) == 1:
+            why_text = f"Why surfaced: {why_parts[0]} below threshold with {sig_count} independent signal{'s' if sig_count != 1 else ''}."
+        else:
+            why_text = f"Why surfaced: {sig_count} independent risk signals detected."
+
+        st.markdown(f"""
+        <div class="pri-surface">
+            <div class="pri-badge {badge_cls}">{attention}</div>
+            <div class="pri-prod">{top["PRODUCT_ID"]} \u2014 {top["PRODUCT_NAME"]}</div>
+            <div class="pri-sigs">{sig_count} independent risk signal{"s" if sig_count != 1 else ""} \u00b7 {signal_text}</div>
+            <div class="pri-mets">{met_html}</div>
+            <div class="pri-why">{why_text}</div>
+            <div class="pri-gov">Signals are independently observed indicators and do not establish causality.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(
+            '<div class="surface" style="color:#059669;font-size:0.85rem;">'
+            'All products within normal operating thresholds.</div>',
+            unsafe_allow_html=True,
+        )
+
+# ── RIGHT: NETWORK PULSE ─────────────────────────────────────────────────
+with ef_right:
+    st.markdown('<div class="sec-label">Network Pulse</div>', unsafe_allow_html=True)
+    total = monitored_count or 1
+    pulse_rows = [
+        ("High Risk", high_risk_count, "high"),
+        ("Watchlist", watchlist_count, "watch"),
+        ("Healthy", healthy_count, "healthy"),
+    ]
+    pulse_table_rows = "".join(
+        f'<tr><td><span class="pulse-status {cls}">{label}</span></td>'
+        f'<td>{count}</td><td class="pulse-share">{count / total:.1%}</td></tr>'
+        for label, count, cls in pulse_rows
+    )
+
+    st.markdown(f"""
+    <div class="surface" style="padding:0.85rem 0.95rem;">
+        <div class="pulse-grid">
+            <div class="pulse-cell">
+                <div class="pulse-n">{monitored_count}</div>
+                <div class="pulse-l">Monitored</div>
+            </div>
+            <div class="pulse-cell">
+                <div class="pulse-n d">{high_risk_count}</div>
+                <div class="pulse-l">High Risk</div>
+            </div>
+        </div>
+        <table class="pulse-table">
+            <thead><tr><th>Status</th><th>Products</th><th>Share</th></tr></thead>
+            <tbody>{pulse_table_rows}</tbody>
+        </table>
+        <div class="pulse-ts">Last refreshed: {refresh_ts}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 6. NETWORK INVENTORY INTELLIGENCE
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("")
+st.markdown('<div class="sec-label">Network Inventory Intelligence</div>', unsafe_allow_html=True)
+
+if not inv_trend_df.empty:
+    chart_df = inv_trend_df.rename(columns={
+        "SNAPSHOT_DATE": "Date",
+        "AVAILABLE_INVENTORY": "Available Inventory",
+        "SAFETY_STOCK_LEVEL": "Safety Stock Level",
+    })
+    chart_df["Date"] = pd.to_datetime(chart_df["Date"])
+    chart_df = chart_df.set_index("Date")
+    st.line_chart(chart_df, height=240)
+
+    total_snaps = len(inv_trend_df)
+    below_count = int((inv_trend_df["AVAILABLE_INVENTORY"] < inv_trend_df["SAFETY_STOCK_LEVEL"]).sum())
+    if below_count == 0:
+        inv_insight = "Inventory remains above safety stock across all displayed snapshots."
+    elif below_count == total_snaps:
+        inv_insight = "Inventory is below safety stock across all displayed snapshots."
+    else:
+        inv_insight = f"Inventory is below safety stock in {below_count} of {total_snaps} displayed snapshots."
+
+    st.markdown(f'<div class="inv-note">{inv_insight}</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="inv-note">Snapshot-aware inventory view \u00b7 '
+        'no cross-date aggregation \u00b7 each date represents its own inventory position.</div>',
+        unsafe_allow_html=True,
+    )
+else:
+    st.info("No inventory snapshot data available.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 7. PRODUCT RISK INTELLIGENCE
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("")
+st.markdown('<div class="sec-label">Product Risk Intelligence</div>', unsafe_allow_html=True)
+
+
+def fmt_pct_html(val):
+    if val is None or pd.isna(val):
+        return '<span class="pt-miss">\u2014</span>'
+    return f'<span class="pt-pct">{val:.0%}</span>'
+
+
+def fmt_sig_html(n):
+    if n is None or pd.isna(n):
+        return '<span class="pt-miss">\u2014</span>'
+    n = int(n)
+    if n == 0:
+        return '<span class="pt-sig ok">\u2713 None</span>'
+    if n == 1:
+        return '<span class="pt-sig watch">\u25b3 1 signal</span>'
+    return f'<span class="pt-sig high">\u25cf {n} signals</span>'
+
+
+table_rows = ""
+for _, row in risk_df.iterrows():
+    table_rows += (
+        f'<tr>'
+        f'<td><span class="pt-prod">{row["PRODUCT_ID"]}</span> {row["PRODUCT_NAME"]}</td>'
+        f'<td>{fmt_pct_html(row.get("FULFILLMENT_RATE"))}</td>'
+        f'<td>{fmt_pct_html(row.get("ON_TIME_DELIVERY_RATE"))}</td>'
+        f'<td>{fmt_pct_html(row.get("PRODUCTION_ATTAINMENT"))}</td>'
+        f'<td>{fmt_sig_html(row.get("RISK_SIGNAL_COUNT"))}</td>'
+        f'</tr>'
+    )
+
+if table_rows:
+    st.markdown(f"""
+    <div class="pt-surface">
+        <table class="pt-table">
+            <thead><tr>
+                <th>Product</th><th>Fulfillment</th><th>On-Time Delivery</th>
+                <th>Production</th><th style="text-align:right">Risk Signals</th>
+            </tr></thead>
+            <tbody>{table_rows}</tbody>
+        </table>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.info("No product risk signal data available.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 8. ASK CHAINLOOM — INVESTIGATION CONSOLE
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("")
+st.markdown("""
+<div class="ai-console">
+    <div class="ai-hdr">Ask ChainLoom</div>
+    <div class="ai-title">What would you like to investigate?</div>
+    <div class="ai-sub">Explore governed supply-chain intelligence using natural language.</div>
+</div>
+""", unsafe_allow_html=True)
 
 if "analyst_history" not in st.session_state:
-    st.session_state["analyst_history"] = []
+    st.session_state.analyst_history = []
 if "analyst_results" not in st.session_state:
-    st.session_state["analyst_results"] = []
-if "analyst_input" not in st.session_state:
-    st.session_state["analyst_input"] = ""
-
-
-def _choose_suggestion(text: str):
-    st.session_state["analyst_input"] = text
-
+    st.session_state.analyst_results = []
 
 suggestions = [
     "Which products currently show multiple risk signals?",
@@ -685,260 +658,236 @@ suggestions = [
     "Which suppliers have the highest defect rate?",
 ]
 
-st.caption("Suggested investigations · click one to prefill the question")
+# Suggestion prefill: use a versioned widget key so Streamlit cannot reuse
+# the previous text_input state when a suggestion is selected.
+if "_suggestion_text" not in st.session_state:
+    st.session_state["_suggestion_text"] = ""
+if "_suggestion_version" not in st.session_state:
+    st.session_state["_suggestion_version"] = 0
 
-cols = st.columns(4, gap="small")
-for i, suggestion in enumerate(suggestions):
-    with cols[i]:
-        st.button(
-            suggestion,
-            key=f"suggestion_{i}",
-            use_container_width=True,
-            on_click=_choose_suggestion,
-            args=(suggestion,),
-        )
-
-if st.session_state.get("analyst_input"):
-    st.caption("Question ready · edit it if needed, then run the investigation.")
+sg_cols = st.columns(len(suggestions))
+for i, sg in enumerate(suggestions):
+    with sg_cols[i]:
+        if st.button(sg, key=f"sg_{i}", use_container_width=True):
+            st.session_state["_suggestion_text"] = sg
+            st.session_state["_suggestion_version"] += 1
+            st.rerun()
 
 question = st.text_input(
-    "Ask ChainLoom",
-    key="analyst_input",
+    "Ask a question about your supply chain",
+    value=st.session_state["_suggestion_text"],
     placeholder="e.g. What is the fulfillment rate by customer segment?",
+    key=f"analyst_input_{st.session_state['_suggestion_version']}",
     label_visibility="collapsed",
 )
 
-ask_col, helper_col = st.columns([1, 5], gap="medium")
-with ask_col:
-    ask = st.button("Investigate", type="primary", key="investigate_button", use_container_width=True)
-with helper_col:
-    st.caption("Grounded in the ChainLoom semantic view and governed analytical surfaces.")
+# Once the widget is initialized with the suggestion, retain what the user
+# types in the normal widget state; the versioned key only changes on a new
+# suggestion selection.
+st.session_state["_suggestion_text"] = question
 
-if ask:
-    clean_question = question.strip()
-    if not clean_question:
-        st.warning("Enter a question or select one of the suggested investigations.")
-    else:
-        with st.spinner("Consulting Cortex Analyst..."):
-            try:
-                raw = call_analyst(clean_question, st.session_state["analyst_history"])
-                parsed = parse_analyst_response(raw)
+if st.button("Investigate", type="primary", key="analyst_ask") and question.strip():
+    with st.spinner("Consulting Cortex Analyst..."):
+        try:
+            raw_resp = call_analyst(question.strip(), st.session_state.analyst_history)
+            parsed = parse_analyst_response(raw_resp)
+            st.session_state.analyst_history.append(
+                {"role": "user", "content": [{"type": "text", "text": question.strip()}]}
+            )
+            reply_content = []
+            if parsed["text"]:
+                reply_content.append({"type": "text", "text": parsed["text"]})
+            if parsed["sql"]:
+                reply_content.append({"type": "sql", "statement": parsed["sql"]})
+            st.session_state.analyst_history.append(
+                {"role": "analyst", "content": reply_content}
+            )
+            df_result = run_analyst_sql(parsed["sql"]) if parsed["sql"] else None
+            st.session_state.analyst_results.append({
+                "question": question.strip(),
+                "parsed": parsed,
+                "df": df_result,
+            })
+        except Exception as e:
+            st.error(f"Cortex Analyst error: {e}")
 
-                st.session_state["analyst_history"].append(
-                    {"role": "user", "content": [{"type": "text", "text": clean_question}]}
-                )
-
-                assistant_content = []
-                if parsed["text"]:
-                    assistant_content.append({"type": "text", "text": parsed["text"]})
-                if parsed["sql"]:
-                    assistant_content.append({"type": "sql", "statement": parsed["sql"]})
-                if assistant_content:
-                    st.session_state["analyst_history"].append(
-                        {"role": "analyst", "content": assistant_content}
-                    )
-
-                df_result = run_analyst_sql(parsed["sql"]) if parsed["sql"] else None
-                st.session_state["analyst_results"].append(
-                    {"question": clean_question, "parsed": parsed, "df": df_result}
-                )
-            except Exception as exc:
-                st.error(f"Cortex Analyst error: {exc}")
-
-
-# ============================================================
-# Investigation results
-# ============================================================
-
-if st.session_state["analyst_results"]:
-    st.markdown(
-        """
-        <div class="cl-section">
-          <div class="cl-section-kicker">INVESTIGATION</div>
-          <div class="cl-section-title">Your governed investigation</div>
-          <div class="cl-section-sub">Questions, findings and generated SQL from Cortex Analyst</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-for entry in reversed(st.session_state["analyst_results"]):
+def render_governed_result(entry, governance=None):
     parsed = entry["parsed"]
-
     st.markdown(
-        f"""
-        <div class="cl-investigation">
-          <div class="cl-investigation-tag">ASK CHAINLOOM · INVESTIGATION</div>
-          <div class="cl-investigation-question">{entry["question"]}</div>
-        </div>
-        """,
+        f'<div class="inv-card">'
+        f'<div class="inv-tag">Ask ChainLoom &mdash; Investigation</div>'
+        f'<div class="inv-q">{entry["question"]}</div>'
+        f'<hr class="inv-sep">'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
     if parsed["text"]:
-        st.markdown(
-            f'<div class="cl-finding"><b>Finding</b><br>{parsed["text"]}</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="inv-section-label">Finding</div>', unsafe_allow_html=True)
+        st.markdown(parsed["text"])
 
     if parsed["warnings"]:
         with st.expander(f"Analyst advisories · {len(parsed['warnings'])}", expanded=False):
             for warning in parsed["warnings"]:
-                st.caption(_advisory_text(warning))
+                st.caption(str(warning))
 
-    if entry["df"] is not None:
-        if not entry["df"].empty:
-            st.markdown("**Results**")
-            st.dataframe(entry["df"], use_container_width=True, hide_index=True)
-        else:
-            st.info("Query returned no rows.")
+    if entry.get("df") is not None and not entry["df"].empty:
+        st.markdown('<div class="inv-section-label">Results</div>', unsafe_allow_html=True)
+        st.dataframe(entry["df"], use_container_width=True, hide_index=True)
+    elif parsed["sql"]:
+        st.caption("Query returned no results.")
 
     with st.expander("View generated SQL"):
         if parsed["sql"]:
             st.code(parsed["sql"], language="sql")
         else:
-            st.caption("No SQL was generated.")
+            st.caption("No SQL was generated for this question.")
 
     with st.expander("View governance metadata"):
+        request_id = parsed.get("request_id") or "Not provided"
         st.markdown(
             f"**Semantic View:** `{SEMANTIC_VIEW}`  \n"
-            f"**Request ID:** `{parsed.get('request_id','')}`  \n"
-            "Results are generated through the governed ChainLoom semantic layer."
+            f"**Request ID:** `{request_id}`  \n"
+            "The investigation is grounded in the governed semantic layer and its analytical boundaries."
         )
 
-
-# ============================================================
-# Trust & governance
-# ============================================================
-
-st.markdown(
-    """
-    <div class="cl-section">
-      <div class="cl-section-kicker">TRUST &amp; GOVERNANCE</div>
-      <div class="cl-section-title">Make the analytical boundary visible</div>
-      <div class="cl-section-sub">ChainLoom distinguishes what the data can establish from what it cannot.</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-challenges = [
-    {
-        "badge": "CAUSAL BOUNDARY",
-        "label": "Can P104 shortage be proven as the cause?",
-        "question": "Did Part P104 inventory shortages cause production constraints last month?",
-        "can": "P104 BOM exposure and observed production constraints can be independently reported.",
-        "cannot": "Causation cannot be established. P104_EXPOSURE_FLAG indicates BOM dependency, not proof of shortage. Inventory and production are separate analytical surfaces.",
-    },
-    {
-        "badge": "ATTRIBUTION BOUNDARY",
-        "label": "Can supplier delay be proven as the cause?",
-        "question": "Which supplier delivery delays directly caused late shipments to our Strategic customers?",
-        "can": "Supplier delays and customer shipment delays can be independently observed.",
-        "cannot": "Direct supplier-to-customer causation cannot be established because lot/batch genealogy linking a supplier receipt to a customer shipment is unavailable.",
-    },
-    {
-        "badge": "INDEPENDENT SIGNALS",
-        "label": "Can multiple risk signals be combined safely?",
-        "question": "Which products currently show multiple independent supply-chain risk signals across fulfillment, delivery, and production?",
-        "can": "Multiple independent product risk signals can be reported using the governed RISK_SIGNAL_COUNT.",
-        "cannot": "A weighted or causal risk score cannot be inferred. Co-occurrence does not imply causation.",
-    },
-]
-
-gc = st.columns(3)
-for i, ch in enumerate(challenges):
-    with gc[i]:
+    if governance:
+        st.markdown('<div class="inv-section-label">Governance interpretation</div>', unsafe_allow_html=True)
         st.markdown(
-            f"""
-            <div class="cl-surface" style="min-height:112px;">
-              <div style="font-size:.55rem;font-weight:800;letter-spacing:.08em;color:#2563EB;">
-                {ch["badge"]}
-              </div>
-              <div style="font-size:.78rem;font-weight:700;color:#334155;margin-top:.38rem;line-height:1.35;">
-                {ch["label"]}
-              </div>
-            </div>
-            """,
+            f'<div class="can-block"><strong>What the data can establish:</strong> {governance["can"]}</div>'
+            f'<div class="cannot-block"><strong>What the data cannot establish:</strong> {governance["cannot"]}</div>',
             unsafe_allow_html=True,
         )
 
-        if st.button("Run Challenge", key=f"challenge_{i}", use_container_width=True):
-            with st.spinner("Running governance challenge..."):
-                try:
-                    raw = call_analyst(ch["question"])
-                    parsed = parse_analyst_response(raw)
-
-                    st.markdown("**BOUNDARY ENFORCED**" if i < 2 else "**GOVERNED**")
-
-                    if parsed["text"]:
-                        st.markdown(parsed["text"])
-
-                    if parsed["warnings"]:
-                        with st.expander(f"Analyst advisories · {len(parsed['warnings'])}", expanded=False):
-                            for warning in parsed["warnings"]:
-                                st.caption(_advisory_text(warning))
-
-                    if parsed["sql"]:
-                        df = run_analyst_sql(parsed["sql"])
-                        if df is not None and not df.empty:
-                            st.dataframe(df, use_container_width=True, hide_index=True)
-                        with st.expander("View generated SQL"):
-                            st.code(parsed["sql"], language="sql")
-
-                    st.markdown(
-                        f'<div class="cl-gov-good"><b>What the data can establish:</b> {ch["can"]}</div>'
-                        f'<div class="cl-gov-bad"><b>What the data cannot establish:</b> {ch["cannot"]}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                    if parsed.get("request_id"):
-                        st.caption(f"Request ID: {parsed['request_id']}")
-                except Exception as exc:
-                    st.error(f"Cortex Analyst error: {exc}")
+# Render investigation results
+for entry in reversed(st.session_state.analyst_results):
+    render_governed_result(entry)
 
 
-st.markdown(
-    """
-    <div style="margin-top:.75rem;">
-      <span class="cl-gov-badge">✓ Snowflake Semantic View</span>
-      <span class="cl-gov-badge">✓ Verified Query Repository</span>
-      <span class="cl-gov-badge">✓ Independent Analytical Surfaces</span>
-      <span class="cl-gov-badge">✓ No Unsupported Fact-to-Fact Joins</span>
-      <span class="cl-gov-badge">✓ No Unsupported Causal Inference</span>
-      <span class="cl-gov-badge">✓ Semi-Additive Inventory Handling</span>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# ══════════════════════════════════════════════════════════════════════════════
+# 9. TRUST & GOVERNANCE
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("")
+st.markdown('<div class="sec-label">Trust &amp; Governance</div>', unsafe_allow_html=True)
+st.caption("Challenge ChainLoom's analytical boundaries using the same governed investigation pattern.")
+
+challenges = [
+    {
+        "badge_cls": "causal",
+        "badge": "Causal Boundary",
+        "label": "Can P104 shortage be proven as the cause?",
+        "question": "Did Part P104 inventory shortages cause production constraints last month?",
+        "can": "P104 BOM exposure and observed production constraints can be independently reported.",
+        "cannot": "Causation cannot be established. P104_EXPOSURE_FLAG indicates BOM dependency, not proof of shortage. Inventory and production are separate fact tables with no fact-to-fact join.",
+        "state": "BOUNDARY ENFORCED",
+        "state_cls": "enforced",
+    },
+    {
+        "badge_cls": "attrib",
+        "badge": "Attribution Boundary",
+        "label": "Can supplier delay be proven as the cause?",
+        "question": "Which supplier delivery delays directly caused late shipments to our Strategic customers?",
+        "can": "Supplier delays and customer shipment delays can be independently observed from their respective analytical surfaces.",
+        "cannot": "Direct supplier-to-customer causation cannot be established. Lot/batch genealogy is unavailable, so no linkage exists between a specific supplier receipt and a specific customer shipment.",
+        "state": "BOUNDARY ENFORCED",
+        "state_cls": "enforced",
+    },
+    {
+        "badge_cls": "signals",
+        "badge": "Independent Signals",
+        "label": "Can multiple risk signals be combined without inventing causality?",
+        "question": "Which products currently show multiple independent supply-chain risk signals across fulfillment, delivery, and production?",
+        "can": "Multiple independent product risk signals can be reported. RISK_SIGNAL_COUNT counts co-occurring threshold breaches across fulfillment, delivery, and production.",
+        "cannot": "A weighted or composite causal risk score cannot be created. Signals are independently observed; co-occurrence does not imply causation.",
+        "state": "GOVERNED",
+        "state_cls": "verified",
+    },
+]
+
+# Keep the three boundary choices compact and scannable.
+ch_cols = st.columns(3)
+for i, ch in enumerate(challenges):
+    with ch_cols[i]:
+        st.markdown(
+            f'<div class="tc">'
+            f'<div class="tc-badge {ch["badge_cls"]}">{ch["badge"]}</div>'
+            f'<div class="tc-q">{ch["label"]}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Run Challenge", key=f"ch_{i}", use_container_width=True):
+            st.session_state[f"_run_challenge_{i}"] = True
+
+# Render a selected governance challenge using the same Question → Finding → Results
+# pattern as Ask ChainLoom, then append the explicit can/cannot boundary.
+for i, ch in enumerate(challenges):
+    if st.session_state.get(f"_run_challenge_{i}"):
+        st.session_state[f"_run_challenge_{i}"] = False
+
+        with st.spinner("Running governance challenge..."):
+            try:
+                raw = call_analyst(ch["question"])
+                parsed = parse_analyst_response(raw)
+                df = run_analyst_sql(parsed["sql"]) if parsed["sql"] else None
+
+                entry = {
+                    "question": ch["question"],
+                    "parsed": parsed,
+                    "df": df,
+                }
+
+                st.markdown(
+                    f'<div class="gov-state {ch["state_cls"]}">{ch["state"]}</div>',
+                    unsafe_allow_html=True,
+                )
+                render_governed_result(
+                    entry,
+                    governance={"can": ch["can"], "cannot": ch["cannot"]},
+                )
+            except Exception as e:
+                st.error(f"Cortex Analyst error: {e}")
+
+# Permanent governance proof points — concise and reviewer-friendly.
+st.markdown('<div class="inv-section-label">Governance controls</div>', unsafe_allow_html=True)
+st.markdown("""
+<div class="gov-badges">
+    <span class="gb">✓ Snowflake Semantic View</span>
+    <span class="gb">✓ Verified Query Repository</span>
+    <span class="gb">✓ Independent Analytical Surfaces</span>
+    <span class="gb">✓ No Unsupported Fact-to-Fact Joins</span>
+    <span class="gb">✓ No Unsupported Causal Inference</span>
+    <span class="gb">✓ Semi-Additive Inventory Handling</span>
+</div>
+""", unsafe_allow_html=True)
 
 with st.expander("How ChainLoom reasons"):
-    st.markdown(
-        """
-        **Analytical architecture**
+    st.markdown("""
+**Analytical Architecture**
 
-        ChainLoom maintains independent analytical surfaces for fulfillment,
-        shipment performance, production, inventory, and supplier performance.
+ChainLoom maintains five independent curated analytical surfaces — customer fulfillment,
+shipment performance, production performance, inventory position, and supplier performance —
+each with a clearly defined grain and governed by a Snowflake Semantic View with verified queries.
 
-        **Governance**
+**Governance Principles**
 
-        - No unsupported fact-to-fact joins.
-        - Inventory remains snapshot-aware and semi-additive.
-        - P104 exposure indicates BOM dependency, not proof of shortage or causality.
-        - Supplier-to-customer causality requires lot/batch genealogy that is not present.
-        - Product risk signals are independent observed indicators.
-        - Missing metrics remain unavailable rather than being silently converted to zero.
+1. **No unsupported fact-to-fact joins.** Each surface is queried independently through the semantic layer. Cross-surface signals are computed through governed views that aggregate each surface separately before joining at the product level.
+2. **Inventory is semi-additive.** Inventory quantities are snapshot-based and must not be summed across snapshot dates.
+3. **P104_EXPOSURE_FLAG means BOM dependency, not proof of shortage or causality.**
+4. **Supplier-to-customer causality cannot be established.** There is no lot/batch genealogy linking a specific supplier delivery to a specific customer shipment.
+5. **Product risk signals are independent observed indicators.** RISK_SIGNAL_COUNT counts threshold breaches; it is not a weighted or composite causal score.
+6. **Missing metrics remain unavailable.** A missing fulfillment or delivery observation is shown as "—", never silently converted to 0%.
 
-        **Semantic View:** `CHAINLOOM.SEMANTIC.CHAINLOOM_ANALYTICS`
-        """
-    )
+**Semantic View:** `CHAINLOOM.SEMANTIC.CHAINLOOM_ANALYTICS`
+**Verified Queries:** Q1–Q10 operational · Q13 product risk signals · Q11–Q12 governance/adversarial
+""")
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 10. FOOTER
+# ══════════════════════════════════════════════════════════════════════════════
 st.markdown(
-    f"""
-    <div class="cl-footer">
-      ChainLoom · Snowflake-Native Supply Chain Intelligence<br>
-      Semantic View: {SEMANTIC_VIEW} · Refreshed: {refresh_ts}
-    </div>
-    """,
+    f'<div class="cl-footer">ChainLoom \u00b7 Snowflake-Native Supply Chain Intelligence<br>'
+    f'Semantic View: {SEMANTIC_VIEW}<br>'
+    f'Last refreshed: {refresh_ts}</div>',
     unsafe_allow_html=True,
 )
