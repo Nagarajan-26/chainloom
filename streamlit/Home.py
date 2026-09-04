@@ -3,6 +3,7 @@ import json
 import os
 import pandas as pd
 from datetime import datetime
+import altair as alt
 
 st.set_page_config(
     page_title="ChainLoom | Control Tower",
@@ -661,8 +662,36 @@ if not inv_trend_df.empty:
         "SAFETY_STOCK_LEVEL": "Safety Stock Level",
     })
     chart_df["Date"] = pd.to_datetime(chart_df["Date"])
-    chart_df = chart_df.set_index("Date")
-    st.line_chart(chart_df, height=240)
+    chart_df = chart_df.sort_values("Date")
+    chart_long = chart_df.melt(
+        id_vars=["Date"],
+        value_vars=["Available Inventory", "Safety Stock Level"],
+        var_name="Metric",
+        value_name="Quantity",
+    )
+    latest_chart_date = chart_df["Date"].max()
+    first_chart_date = chart_df["Date"].min()
+    inventory_chart = (
+        alt.Chart(chart_long)
+        .mark_line(strokeWidth=2)
+        .encode(
+            x=alt.X(
+                "Date:T",
+                title=None,
+                scale=alt.Scale(domain=[first_chart_date, latest_chart_date]),
+                axis=alt.Axis(format="%b %d", labelAngle=0, tickCount="month"),
+            ),
+            y=alt.Y("Quantity:Q", title=None, axis=alt.Axis(format=",.0f")),
+            color=alt.Color("Metric:N", title=None),
+            tooltip=[
+                alt.Tooltip("Date:T", title="Snapshot", format="%Y-%m-%d"),
+                alt.Tooltip("Metric:N", title="Metric"),
+                alt.Tooltip("Quantity:Q", title="Quantity", format=",.0f"),
+            ],
+        )
+        .properties(height=240)
+    )
+    st.altair_chart(inventory_chart, use_container_width=True)
 
     total_snaps = len(inv_trend_df)
     below_count = int((inv_trend_df["AVAILABLE_INVENTORY"] < inv_trend_df["SAFETY_STOCK_LEVEL"]).sum())
@@ -778,6 +807,7 @@ suggestions = [
     "Which carriers have the lowest on-time delivery?",
     "Which parts are below safety stock?",
     "Which suppliers have the highest defect rate?",
+    "What is the fulfillment rate by customer segment?",
 ]
 
 # Suggestion prefill: use a versioned widget key so Streamlit cannot reuse
@@ -869,11 +899,44 @@ def build_business_finding(entry):
     if "part" in q and "safety stock" in q:
         return f"{n} part{'s' if n != 1 else ''} matched the below-safety-stock condition in the governed result."
 
+    # Customer-segment fulfillment
+    if "fulfillment" in q and "customer segment" in q and "FULFILLMENT_RATE" in cols:
+        segment_col = cols.get("CUSTOMER_SEGMENT")
+        rate_col = cols["FULFILLMENT_RATE"]
+        if segment_col is not None:
+            valid = df[[segment_col, rate_col]].dropna(subset=[segment_col, rate_col]).copy()
+            if not valid.empty:
+                valid = valid.sort_values(rate_col, ascending=False)
+                best = valid.iloc[0]
+                worst = valid.iloc[-1]
+                if len(valid) == 1:
+                    return f"{best[segment_col]} has an observed fulfillment rate of {float(best[rate_col]):.2%}."
+                return (
+                    f"{best[segment_col]} has the highest observed fulfillment rate at {float(best[rate_col]):.2%}; "
+                    f"{worst[segment_col]} is lowest at {float(worst[rate_col]):.2%}."
+                )
+
     # Multiple product risk signals
     if "product" in q and "risk signal" in q:
         return f"{n} product{'s' if n != 1 else ''} show multiple independently observed risk signals."
 
     return f"The governed query returned {n} matching result{'s' if n != 1 else ''}."
+
+
+def build_governance_finding(entry, governance):
+    """Lead governance challenges with the analytical boundary, not the row count."""
+    q = (entry.get("question") or "").lower()
+    df = entry.get("df")
+    n = len(df) if df is not None else 0
+
+    if "supplier" in q and "customer" in q and ("cause" in q or "caused" in q):
+        return "Direct supplier-to-customer causation cannot be established from the available data."
+    if "p104" in q or "shortage" in q and "production" in q:
+        return "The available data cannot establish that P104 shortage caused production constraints."
+    if "multiple independent" in q or ("risk signal" in q and "causality" in q):
+        return "Multiple independent threshold breaches can be reported at product level, but they do not form a weighted or causal risk score."
+
+    return governance.get("cannot") or f"The governed boundary was applied to {n} matching result{'s' if n != 1 else ''}."
 
 
 def clean_analyst_context(text):
@@ -898,7 +961,10 @@ def render_governed_result(entry, governance=None):
         unsafe_allow_html=True,
     )
 
-    finding = build_business_finding(entry)
+    if governance:
+        finding = build_governance_finding(entry, governance)
+    else:
+        finding = build_business_finding(entry)
     st.markdown('<div class="inv-section-label">Finding</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="finding-surface">{finding}</div>', unsafe_allow_html=True)
 
@@ -909,6 +975,9 @@ def render_governed_result(entry, governance=None):
 
     if entry.get("df") is not None and not entry["df"].empty:
         st.markdown('<div class="inv-section-label">Results</div>', unsafe_allow_html=True)
+        if governance:
+            result_count = len(entry["df"])
+            st.caption(f"Observed results: {result_count} matching record{'s' if result_count != 1 else ''}.")
         st.dataframe(entry["df"], use_container_width=True, hide_index=True)
     elif parsed["sql"]:
         st.caption("Query returned no results.")
