@@ -572,7 +572,7 @@ with ef_left:
             signals_list.append("Production")
         signal_text = " \u00b7 ".join(signals_list) if signals_list else "\u2014"
 
-        attention = "HIGH ATTENTION" if sig_count >= 2 else "WATCH"
+        attention = "HIGH RISK" if sig_count >= 2 else "WATCHLIST"
         badge_cls = "high" if sig_count >= 2 else "watch"
 
         ff_rate = top.get("FULFILLMENT_RATE")
@@ -833,6 +833,60 @@ if st.button("Investigate", type="primary", key="analyst_ask") and question.stri
         except Exception as e:
             st.error(f"Cortex Analyst error: {e}")
 
+def build_business_finding(entry):
+    """Create a concise business-first finding from governed query results.
+
+    Prefer deterministic summaries from returned evidence. For questions that do
+    not match a known pattern, fall back to a neutral result-count statement
+    rather than inventing an interpretation.
+    """
+    df = entry.get("df")
+    q = (entry.get("question") or "").lower()
+    if df is None or df.empty:
+        return "The governed query returned no matching records."
+
+    n = len(df)
+    cols = {str(c).upper(): c for c in df.columns}
+
+    # Supplier defect-rate investigation
+    if "supplier" in q and "defect" in q and "DEFECT_RATE" in cols:
+        row = df.iloc[0]
+        name_col = cols.get("SUPPLIER_NAME")
+        rate_col = cols["DEFECT_RATE"]
+        if name_col is not None and pd.notna(row[name_col]) and pd.notna(row[rate_col]):
+            return f"{row[name_col]} has the highest observed defect rate at {float(row[rate_col]):.0%}."
+
+    # Carrier OTD investigation
+    if "carrier" in q and ("on-time" in q or "otd" in q or "delivery" in q):
+        rate_col = next((cols[k] for k in ("ON_TIME_DELIVERY_RATE", "OTD_RATE") if k in cols), None)
+        name_col = cols.get("CARRIER_NAME")
+        if rate_col is not None and name_col is not None:
+            row = df.iloc[0]
+            if pd.notna(row[name_col]) and pd.notna(row[rate_col]):
+                return f"{row[name_col]} has the lowest observed on-time delivery rate at {float(row[rate_col]):.0%}."
+
+    # Parts below safety stock
+    if "part" in q and "safety stock" in q:
+        return f"{n} part{'s' if n != 1 else ''} matched the below-safety-stock condition in the governed result."
+
+    # Multiple product risk signals
+    if "product" in q and "risk signal" in q:
+        return f"{n} product{'s' if n != 1 else ''} show multiple independently observed risk signals."
+
+    return f"The governed query returned {n} matching result{'s' if n != 1 else ''}."
+
+
+def clean_analyst_context(text):
+    """Remove the Analyst's implementation-style preamble from the executive finding area."""
+    if not text:
+        return ""
+    marker = "This is our interpretation of your question:"
+    cleaned = text.strip()
+    if cleaned.lower().startswith(marker.lower()):
+        cleaned = cleaned[len(marker):].strip()
+    return cleaned
+
+
 def render_governed_result(entry, governance=None):
     parsed = entry["parsed"]
     st.markdown(
@@ -844,12 +898,14 @@ def render_governed_result(entry, governance=None):
         unsafe_allow_html=True,
     )
 
-    if parsed["text"]:
-        st.markdown('<div class="inv-section-label">Finding</div>', unsafe_allow_html=True)
-        st.markdown(parsed["text"])
-    elif entry.get("df") is not None and not entry["df"].empty:
-        st.markdown('<div class="inv-section-label">Finding</div>', unsafe_allow_html=True)
-        st.caption("The governed query returned results; see the evidence below.")
+    finding = build_business_finding(entry)
+    st.markdown('<div class="inv-section-label">Finding</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="finding-surface">{finding}</div>', unsafe_allow_html=True)
+
+    analyst_context = clean_analyst_context(parsed.get("text", ""))
+    if analyst_context and analyst_context.lower() != finding.lower():
+        with st.expander("Analyst interpretation", expanded=False):
+            st.markdown(analyst_context)
 
     if entry.get("df") is not None and not entry["df"].empty:
         st.markdown('<div class="inv-section-label">Results</div>', unsafe_allow_html=True)
