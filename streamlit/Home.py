@@ -419,7 +419,6 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystem
     letter-spacing: 0.06em; color: #94A3B8; text-align: left;
     padding: 0.5rem 0.6rem; border-bottom: 1px solid #E2E8F0;
 }
-.pt-table th:last-child { text-align: right; }
 .pt-table td {
     font-size: 0.8rem; color: #334155; padding: 0.55rem 0.6rem;
     border-bottom: 1px solid #F8FAFC; vertical-align: middle;
@@ -431,7 +430,7 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystem
 .pt-sig {
     display: inline-flex; align-items: center; gap: 4px;
     font-size: 0.68rem; font-weight: 600; border-radius: 4px;
-    padding: 2px 7px; float: right;
+    padding: 2px 7px;
 }
 .pt-sig.high { background: #FEF2F2; color: #DC2626; }
 .pt-sig.watch { background: #FFF7ED; color: #D97706; }
@@ -992,7 +991,7 @@ st.caption("Live governance posture for the analytical model, followed by three 
 # Enterprise posture: persistent, scannable controls rather than a static demo-style block.
 gov_overview = [
     ("Semantic Layer", "CONNECTED", "ok"),
-    ("Verified Queries", "13", "ok"),
+    ("Verified Queries", "11", "ok"),
     ("Fact-to-Fact Joins", "BLOCKED", "lock"),
     ("Causal Inference", "BLOCKED", "lock"),
     ("Inventory Grain", "SNAPSHOT", "ok"),
