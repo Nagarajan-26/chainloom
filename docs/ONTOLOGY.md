@@ -1,7 +1,7 @@
 # ChainLoom — Supply Chain Ontology
 
-**Status:** Architecture Approved / Model Hardened
-**Version:** 1.1
+**Status:** Implemented
+**Version:** 2.0
 **Problem Statement:** Supply Chain Ontology and Governed Conversational Analytics
 
 ## 1. Purpose
@@ -12,9 +12,11 @@ The ontology defines business entities, relationships and concepts required to u
 
 Supplier → Part → Product → Plant → Inventory / Production → Customer Order → Shipment → Customer
 
-Primary disruption path:
+Primary dependency path (as represented in the deterministic synthetic dataset):
 
 Supplier disruption → Part availability impact → Inventory deterioration → Production constraint → Order fulfillment impact → Shipment delay → Customer impact
+
+This path describes the operational dependency sequence embedded in the synthetic scenario. It does not establish that each step caused the next — relationship traversal does not automatically establish causality (see section 9).
 
 ## 3. Business Entities
 
@@ -213,7 +215,36 @@ These populations must not be merged.
 9. AI must not invent unsupported relationships.
 10. Ambiguous relationship paths must be controlled in the semantic layer.
 
-## 12. Acceptance Criteria
+## 12. Physical, Curated and Semantic Layers
+
+The ontology is realized across three layers:
+
+### RAW Layer (Physical Entities)
+
+16 tables in `CHAINLOOM.RAW`: DATE_DIM, SUPPLIER, PART, PRODUCT, PLANT, CUSTOMER, CARRIER, SUPPLIER_PART, PRODUCT_PART, PURCHASE_ORDER_LINE, SUPPLY_RECEIPT, INVENTORY, PRODUCTION, QUALITY, ORDER_LINE, SHIPMENT.
+
+These use plain names (no `DIM_`, `FACT_`, or `BRIDGE_` prefixes).
+
+### CURATED Layer (Analytical Surfaces)
+
+6 views in `CHAINLOOM.CURATED` that join RAW facts with RAW dimensions into self-contained analytical surfaces:
+
+| View | Grain |
+|------|-------|
+| V_SUPPLIER_PERFORMANCE | Supplier × Part |
+| V_INVENTORY_POSITION | Part × Plant × Snapshot Date |
+| V_PRODUCTION_PERFORMANCE | Plant × Product × Production Date |
+| V_CUSTOMER_FULFILLMENT | Order Line |
+| V_SHIPMENT_PERFORMANCE | Shipment |
+| V_PRODUCT_RISK_SIGNALS | Product (synthesized from three surfaces above) |
+
+### SEMANTIC Layer (Logical Tables)
+
+`CHAINLOOM.SEMANTIC.CHAINLOOM_ANALYTICS` exposes 11 logical tables: the 6 curated surfaces plus 5 RAW dimension tables (DATE_DIM, PLANT, PRODUCT, PART, CARRIER). The semantic view adds 14 fact-to-dimension relationships, 12 governed metrics, synonyms, business comments, and AI generation instructions.
+
+SUPPLIER and CUSTOMER are not registered as standalone dimension tables in the semantic view — their attributes are denormalized into the curated fact views.
+
+## 13. Acceptance Criteria
 
 The ontology is ready when:
 - Core entities have unambiguous definitions.

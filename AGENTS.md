@@ -2,596 +2,184 @@
 
 ## 1. Project Mission
 
-ChainLoom is a finalist-targeted hackathon project for the Snowflake CoCo CLI GCC Edition.
+ChainLoom is a Snowflake-native supply-chain intelligence application for the Snowflake CoCo CLI GCC Edition hackathon.
 
 Problem Statement:
 
 > Supply Chain Ontology and Governed Conversational Analytics
 
-The goal is to build a high-quality, Snowflake-native supply-chain intelligence application that creates a governed industry ontology and semantic layer over fragmented supply-chain data.
-
-ChainLoom should allow users to:
-
-1. Ask natural-language questions about supply-chain operations.
-2. Receive answers grounded in governed business definitions and metrics.
-3. Investigate the causes behind important metric changes.
-4. Traverse business relationships to understand downstream impact.
-5. Provide evidence and provenance for important answers.
-
-ChainLoom is NOT intended to be a generic chatbot or a simple natural-language-to-SQL demo.
+The goal is a governed industry ontology and semantic layer over fragmented supply-chain data, deployed as a working Streamlit Control Tower on Snowflake Container Runtime.
 
 ---
 
-## 2. Product Vision
+## 2. Current Implementation
 
-ChainLoom follows this journey:
+The application is deployed and functioning. Key facts:
 
-ASK → UNDERSTAND → INVESTIGATE → TRACE IMPACT → PROVE
-
-The central product principle is:
-
-> Do not merely answer the question. Understand the business relationship behind it, investigate the cause, quantify downstream impact, and show why the answer can be trusted.
-
-The primary differentiator is governed semantic understanding combined with relationship-aware investigation.
-
----
-
-## 3. Core Business Model
-
-The initial ontology should focus on a manageable but meaningful supply-chain model.
-
-Core entities:
-
-- Supplier
-- Part
-- Plant
-- Product
-- Customer
-- Order
-- Shipment
-- Carrier
-- Inventory
-
-Core relationships include, where appropriate:
-
-- Supplier supplies Part
-- Part is associated with Product
-- Plant manufactures Product
-- Customer places Order
-- Order contains Product/Part
-- Order is fulfilled by Shipment
-- Carrier transports Shipment
-- Shipment is delivered to Customer
-- Plant holds/manages Inventory
-
-The ontology must be implemented as a real governed semantic model in Snowflake rather than existing only as application documentation.
+- **Entry point:** `streamlit/Home.py` (single-file Streamlit application)
+- **Runtime:** Snowflake Container Runtime with OAuth session token authentication
+- **AI integration:** Cortex Analyst REST API (`/api/v2/cortex/analyst/message`)
+- **Semantic view:** `CHAINLOOM.SEMANTIC.CHAINLOOM_ANALYTICS`
+- **Database:** `CHAINLOOM` with schemas `RAW`, `CURATED`, `SEMANTIC`
+- **Curated surfaces:** 6 analytical views (V_SUPPLIER_PERFORMANCE, V_INVENTORY_POSITION, V_PRODUCTION_PERFORMANCE, V_CUSTOMER_FULFILLMENT, V_SHIPMENT_PERFORMANCE, V_PRODUCT_RISK_SIGNALS)
+- **Semantic model:** 11 logical tables, 14 relationships, 12 governed metrics
+- **Verified queries:** Q1–Q10 (operational), Q13 (product risk signals)
+- **Governance boundary checks:** Q11 (causal boundary), Q12 (attribution boundary)
 
 ---
 
-## 4. Core Product Capabilities
+## 3. Critical Files — Do Not Casually Change
 
-The MVP must support the following capabilities.
-
-### 4.1 Governed Conversational Analytics
-
-Users can ask questions such as:
-
-- What is our current On-Time Delivery?
-- Which suppliers are underperforming?
-- Compare supplier performance.
-- Which plants have the highest shipment delays?
-
-Answers must be grounded in the governed semantic layer.
-
-### 4.2 Investigation
-
-The system should be capable of investigating questions such as:
-
-> Why did On-Time Delivery decline?
-
-The investigation should identify meaningful contributors rather than generate an unsupported narrative.
-
-A typical investigation may follow:
-
-Metric deviation
-→ dimension analysis
-→ largest contributor
-→ related entity
-→ supporting evidence
-
-### 4.3 Impact Analysis
-
-The system should support questions such as:
-
-> Supplier S17 is experiencing delays. Which customers are affected?
-
-The system should traverse governed relationships such as:
-
-Supplier
-→ Part
-→ Plant
-→ Order
-→ Shipment
-→ Customer
-
-The result should quantify impact where the underlying data supports it.
-
-### 4.4 Evidence / Provenance
-
-Important answers should expose supporting information such as:
-
-- Business metric definition
-- Relevant semantic entity
-- Verified query where applicable
-- Generated SQL where useful
-- Supporting data
-- Data freshness
-- Relevant source tables
-
-The system must never fabricate evidence.
+| File | Reason |
+|------|--------|
+| `sql/04_semantic/01_create_semantic_view.sql` | Core semantic model with all metrics, relationships, verified queries, and AI generation instructions |
+| `streamlit/Home.py` | Deployed application — any change requires redeployment |
+| `sql/02_raw/04_generate_transactions.sql` | Deterministic synthetic data with embedded disruption scenario |
+| `sql/02_raw/06_final_refine_order_shipment.sql` | Final data refinement ensuring scenario coverage |
+| `sql/03_curated/v_product_risk_signals.sql` | Product risk signal synthesis view |
 
 ---
 
-## 5. Technology Principles
+## 4. Core Business Model
 
-Snowflake is the primary data and AI platform.
+Entities: Supplier, Part, Product, Plant, Customer, Carrier, Date.
 
-Prefer Snowflake-native capabilities when they directly address the requirement.
+RAW layer includes bridge tables (SUPPLIER_PART, PRODUCT_PART) and transactional facts (PURCHASE_ORDER_LINE, SUPPLY_RECEIPT, INVENTORY, PRODUCTION, QUALITY, ORDER_LINE, SHIPMENT).
 
-Expected technologies may include:
-
-- Snowflake
-- Semantic Views
-- Cortex Analyst
-- Cortex Agents
-- Cortex Code / CoCo
-- Verified Queries
-- Streamlit
-- Python
-- SQL
-- Git / GitHub
-
-Do not introduce external technologies merely for novelty.
-
-Every additional technology must have a clear architectural or product justification.
+The curated layer aggregates RAW into five independent analytical surfaces plus a product-level risk signal summary. The semantic view exposes these as 11 logical tables with conformed dimensions.
 
 ---
 
-## 6. Snowflake Version and Documentation Rule
+## 5. Governance Constraints
 
-This project targets the current Snowflake platform available during the 2026 hackathon.
+These constraints are enforced in the semantic view and application. Do not weaken them.
 
-Before implementing Snowflake-specific functionality, verify the current official Snowflake documentation whenever the feature or syntax may have changed.
-
-Do not rely on old tutorials or outdated syntax when current documentation is available.
-
-Prefer:
-
-- GA capabilities over preview capabilities
-- Current Semantic View syntax
-- Current Cortex Analyst capabilities
-- Current Cortex Agent capabilities
-- Current Cortex Code / CoCo capabilities
-
-If a preview feature is considered, explicitly identify it as preview and evaluate whether it is safe and available for the hackathon environment before using it.
-
-Never invent Snowflake syntax.
+1. **No fact-to-fact joins.** Each question is answered from a single analytical surface joined only to dimension tables.
+2. **Inventory is semi-additive.** Snapshot quantities can be summed across parts/plants for one date but must not be summed across dates.
+3. **No causal inference.** Lot/batch genealogy is unavailable. Do not claim that a supplier delay caused a customer shipment delay.
+4. **RISK_SIGNAL_COUNT is a co-occurrence count (0–3), not a weighted or composite risk score.**
+5. **P104_EXPOSURE_FLAG indicates BOM dependency, not proof of shortage or causality.**
+6. **Missing metrics are preserved as NULL/unavailable.** Never silently convert to zero.
+7. **AI does not invent formulas.** All metric definitions come from the governed semantic layer.
 
 ---
 
-## 7. Semantic Layer Rules
+## 6. Semantic Layer Rules
 
-The semantic layer is a core product artifact, not an implementation detail.
+The semantic layer is a core product artifact. It contains entities, relationships, dimensions, facts, metrics, business definitions, synonyms, instructions, and verified queries.
 
-It must contain meaningful:
+Business metrics have a single authoritative definition. Do not define the same metric differently in different parts of the application.
 
-- Entities
-- Relationships
-- Dimensions
-- Facts
-- Metrics
-- Business definitions
-- Synonyms where useful
-- Instructions where useful
-- Verified queries
-
-Business metrics must have a single authoritative definition within ChainLoom.
-
-Do not define the same metric differently in different parts of the application.
-
-For example, if On-Time Delivery is defined as:
-
-Eligible shipments delivered within the promised delivery window
-divided by
-total eligible shipments
-
-that definition must remain consistent across:
-
-- Semantic Views
-- SQL
-- Agent skills
-- UI
-- Documentation
-- Evaluation
+The current 12 governed metrics are defined in `sql/04_semantic/01_create_semantic_view.sql`. Any metric change must be made there first and propagated consistently.
 
 ---
 
-## 8. Verified Query and Evaluation Rules
+## 7. Technology Stack
 
-Verified queries are a critical part of ChainLoom's trust and accuracy strategy.
+- Snowflake (database, compute, semantic views, Container Runtime)
+- Cortex Analyst (governed NL analytics via REST API)
+- Streamlit (application UI)
+- Python (application logic)
+- SQL (data model, curated views, semantic view)
+- Git / GitHub (version control, deployment via Snowflake Git Repository)
 
-Create a curated Golden Question Set containing representative business questions.
-
-Each important question should have:
-
-- Natural-language question
-- Expected business intent
-- Expected metric/entity
-- Expected result or validation logic
-- Verified query where applicable
-
-Do not create verified queries merely to increase their count.
-
-They must represent meaningful user questions.
-
-Evaluation should measure whether the system:
-
-1. Understands the business intent.
-2. Uses the correct semantic entities.
-3. Uses the correct governed metrics.
-4. Generates logically correct SQL.
-5. Produces the expected result.
+Do not introduce external technologies without clear justification.
 
 ---
 
-## 9. AI / Agent Architecture
+## 8. Security and Governance
 
-Avoid a single monolithic prompt whenever specialized capabilities are appropriate.
-
-Potential ChainLoom skills include:
-
-- Supply Chain Query
-- Investigation
-- Impact Analysis
-- Evidence / Provenance
-- Recommendation, if justified after the core MVP is complete
-
-Skills should have clear responsibilities.
-
-The orchestrator should decide which capability is appropriate rather than forcing every question through every skill.
-
-Do not build unnecessary agents.
-
-Agentic behavior must have a clear purpose.
+- Never commit credentials, tokens, passwords, private keys or secrets.
+- Never hardcode Snowflake credentials in application code.
+- The application authenticates via Container Runtime OAuth token, not embedded credentials.
+- Respect Snowflake RBAC.
+- Do not bypass access controls for convenience.
 
 ---
 
-## 10. Hallucination and Trust Rules
-
-The application must prefer refusing or qualifying an answer over inventing information.
-
-If the governed data does not contain enough information to answer a question, ChainLoom should clearly communicate that limitation.
-
-Never fabricate:
-
-- Metrics
-- SQL
-- Evidence
-- Sources
-- Data freshness
-- Business definitions
-- Recommendations presented as facts
-
-Generated explanations must be grounded in actual query results.
-
----
-
-## 11. Data Rules
-
-Use synthetic data only unless the hackathon explicitly provides an approved alternative.
-
-Synthetic data should be:
-
-- Referentially consistent
-- Realistic
-- Sufficiently rich for investigation
-- Designed around deliberate supply-chain scenarios
-
-Prefer meaningful synthetic scenarios over massive random datasets.
-
-Important scenarios may include:
-
-- Supplier disruption
-- Plant bottleneck
-- Shipment delays
-- Inventory shortage
-- Demand spike
-- Quality issue
-
-Data should allow ChainLoom to demonstrate clear cause-and-effect relationships.
-
----
-
-## 12. Security and Governance
-
-Never commit credentials, tokens, passwords, private keys or secrets.
-
-Never hardcode Snowflake credentials.
-
-Respect Snowflake RBAC and existing governance controls.
-
-Do not bypass access controls for convenience.
-
-Do not copy sensitive or private data into the repository.
-
-Do not create insecure shortcuts merely to make a demo work.
-
----
-
-## 13. Cost Discipline
+## 9. Cost Discipline
 
 The project has a limited Snowflake credit budget.
 
-Prefer efficient development practices.
-
-Avoid:
-
-- unnecessarily large warehouses
-- repeated expensive queries
-- uncontrolled synthetic-data generation
-- unnecessary model calls
-- expensive polling loops
-
-Use the smallest practical compute for development and testing.
-
-Before introducing an expensive workload, assess whether a cheaper approach can provide the same result.
-
-Cost should be monitored throughout development rather than only at the end.
+Avoid: unnecessarily large warehouses, repeated expensive queries, uncontrolled data generation, unnecessary model calls, expensive polling loops.
 
 ---
 
-## 14. Application Principles
+## 10. Testing and Evaluation
 
-The Streamlit/application layer should demonstrate the product rather than merely expose a chat box.
+Verified queries (Q1–Q10, Q13) serve as the primary evaluation mechanism. Governance boundary checks (Q11, Q12) test that the system correctly refuses unsupported causal claims.
 
-The UI should make the following concepts visible where appropriate:
-
-- Supply-chain health
-- Governed metrics
-- Investigation flow
-- Entity relationships
-- Downstream impact
-- Evidence / provenance
-
-Prioritize clarity and usefulness over visual complexity.
-
-Do not add UI features that do not contribute to the core product story.
+Evaluation should measure:
+1. Correct business intent interpretation
+2. Correct semantic entity selection
+3. Correct governed metric usage
+4. Logically correct SQL
+5. Expected result
+6. Appropriate handling of unsupported questions
 
 ---
 
-## 15. Testing Requirements
-
-Testing is mandatory.
-
-At minimum, test:
-
-### Functional correctness
-
-Does the application perform the intended workflow?
-
-### Semantic correctness
-
-Does the natural-language question map to the correct business concept?
-
-### SQL correctness
-
-Does generated SQL correctly represent the requested analysis?
-
-### Result correctness
-
-Does the answer match the expected result?
-
-### Consistency
-
-Do different phrasings of the same business question produce consistent answers?
-
-### Failure handling
-
-Does the application appropriately handle unsupported questions?
-
-### Trust
-
-Can important answers be traced to supporting data?
-
----
-
-## 16. Development Workflow
-
-Follow this workflow:
-
-PLAN → IMPLEMENT → TEST → REVIEW
-
-Do not make broad architectural changes without first understanding the existing project documentation.
-
-Before modifying an existing component:
-
-1. Read the relevant documentation.
-2. Inspect the existing implementation.
-3. Understand dependencies.
-4. Make the smallest appropriate change.
-5. Test the change.
-6. Report what changed.
-
-Prefer incremental changes over large rewrites.
-
----
-
-## 17. Agent Authority
+## 11. Agent Authority
 
 AI coding agents may:
-
-- Inspect the repository.
-- Create implementation files.
-- Implement clearly defined requirements.
-- Write tests.
-- Refactor code when behavior is preserved.
-- Improve documentation.
-- Diagnose implementation errors.
+- Inspect the repository
+- Implement clearly defined requirements
+- Write tests
+- Refactor code when behavior is preserved
+- Improve documentation
+- Diagnose implementation errors
 
 AI coding agents must NOT independently change:
-
-- Product scope
-- Core ontology
-- Core business definitions
-- Metric definitions
-- Overall architecture
+- Core ontology or metric definitions
+- Semantic view structure
+- Governance constraints
 - Security model
-- Data governance approach
 - Technology strategy
 
-without explicitly flagging the change for human/architect review.
+without explicitly flagging the change for review.
 
-If an architectural decision is unclear, STOP and ask for clarification rather than inventing one.
+If an architectural decision is unclear, ask rather than guess.
 
 ---
 
-## 18. Source of Truth
-
-The project documentation and approved implementation are the source of truth.
-
-Do not rely on conversation memory for critical architectural decisions.
+## 12. Source of Truth
 
 When there is a conflict:
 
-1. Current approved project documentation
-2. Current Snowflake official documentation
-3. Existing tested implementation
-4. Conversation context
-5. Agent assumptions
+1. Current Snowflake official documentation
+2. `sql/04_semantic/01_create_semantic_view.sql` (the deployed semantic model)
+3. `streamlit/Home.py` (the deployed application)
+4. Project documentation in `docs/`
+5. This file (AGENTS.md)
+6. Conversation context
 
-Agent assumptions must never override explicit project decisions.
-
----
-
-## 19. Code Quality
-
-Prefer:
-
-- Simple designs
-- Small functions
-- Clear naming
-- Type hints where useful
-- Explicit error handling
-- Testable code
-- Minimal dependencies
-- Clear SQL
-- Reusable components
-
-Avoid:
-
-- Clever but opaque code
-- unnecessary abstractions
-- duplicated business logic
-- hardcoded business metrics
-- magic values
-- hidden side effects
-
-Business logic should be easy for another engineer to understand.
+Agent assumptions must never override the deployed implementation or explicit project decisions.
 
 ---
 
-## 20. Git Discipline
+## 13. Code Quality
 
-Use small, meaningful commits.
+Prefer: simple designs, small functions, clear naming, type hints where useful, explicit error handling, testable code, minimal dependencies, clear SQL, reusable components.
 
-Examples:
+Avoid: clever but opaque code, unnecessary abstractions, duplicated business logic, hardcoded business metrics, magic values, hidden side effects.
 
-- `chore: initialize ChainLoom project`
+---
+
+## 14. Git Discipline
+
+Use small, meaningful commits. Examples:
+
 - `feat: add supply chain schema`
 - `feat: add semantic view`
-- `feat: add verified queries`
-- `feat: add investigation workflow`
-- `feat: add impact analysis`
-- `feat: add Streamlit application`
-- `test: add golden question evaluation`
+- `fix: correct OTD metric eligibility filter`
+- `docs: align architecture with implementation`
 
-Do not commit:
-
-- credentials
-- local secrets
-- temporary files
-- generated caches
-- unnecessary large datasets
+Do not commit: credentials, local secrets, temporary files, generated caches.
 
 ---
 
-## 21. Hackathon Priority
-
-The ultimate goal is not maximum code.
-
-The goal is a technically strong, complete and convincing finalist submission.
-
-Every implementation decision should be evaluated against:
-
-1. Technical Execution
-2. Real-World Relevance
-3. Solution Completeness
-
-Prefer depth over superficial feature count.
-
-A small capability that works reliably and can be demonstrated clearly is more valuable than a large capability that is unstable.
-
----
-
-## 22. Agent Behavior
-
-Be proactive but disciplined.
-
-Before implementing:
-
-- inspect the repository
-- read relevant project documentation
-- understand existing decisions
-
-During implementation:
-
-- keep changes focused
-- validate assumptions
-- test important behavior
-- report blockers clearly
-
-When something fails:
-
-1. Diagnose the actual error.
-2. Do not hide the error.
-3. Do not fabricate a successful result.
-4. Attempt a grounded fix.
-5. Re-test.
-
-When a requirement is ambiguous:
-
-> Ask rather than guess.
-
-When a proposed feature is outside scope:
-
-> Flag it before implementing.
-
-When a better architectural approach is identified:
-
-> Explain the trade-off and request approval before changing the architecture.
-
----
-
-## 23. Final Principle
+## 15. Final Principle
 
 ChainLoom should feel like a real enterprise product built on Snowflake, not a collection of AI-generated hackathon features.
 
-Build with purpose.
-
-Build with evidence.
-
-Build with governance.
-
-Build for trust.
-
-Build for the finalist round.
+Build with purpose. Build with evidence. Build with governance. Build for trust.

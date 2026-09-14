@@ -1,197 +1,193 @@
 # ChainLoom — Governed Metrics
 
-**Status:** Architecture Approved / Model Hardened
-**Version:** 1.1
-**Problem Statement:** Supply Chain Ontology and Governed Conversational Analytics
+**Version:** 2.0
+**Status:** Implemented
+**Semantic View:** `CHAINLOOM.SEMANTIC.CHAINLOOM_ANALYTICS`
 
 ## 1. Purpose
 
-This document defines the business meaning, calculation logic, grain and interpretation of ChainLoom's governed metrics.
+This document defines the business meaning, calculation logic, grain and interpretation of ChainLoom's 12 governed metrics as implemented in the semantic view.
 
 ## 2. Metric Design Principles
 
-1. One canonical definition.
-2. Explicit eligibility.
+1. One canonical definition per metric.
+2. Explicit eligibility criteria.
 3. Explicit grain.
 4. No accidental double counting.
-5. Explicit analysis period.
-6. Explainable calculation.
-7. Evidence-backed results.
-8. AI does not invent formulas.
+5. Explainable calculation.
+6. Evidence-backed results.
+7. AI does not invent formulas.
+8. Missing values are preserved as NULL, never silently converted to zero.
 
 ## 3. Metric Catalogue
 
-1. On-Time Delivery Rate
-2. Late Shipment Count
-3. Fill Rate
-4. Average Supplier Lead Time
-5. Supplier Inbound On-Time Rate
-6. Supplier Defect Rate
-7. Inventory Coverage Days
-8. At-Risk Order Count
-9. At-Risk Shipment Count
-10. Confirmed Impacted Customer Count
-11. At-Risk Customer Count
+### Customer Fulfillment Surface
 
-## 4. M01 — On-Time Delivery Rate
+| # | Metric | Expression |
+|---|--------|------------|
+| M01 | Fulfillment Rate | `SUM(FULFILLED_QUANTITY) / NULLIF(SUM(ORDERED_QUANTITY), 0)` |
+| M02 | Order Lines with Fulfillment Gaps | `COUNT_IF(FULFILLMENT_GAP_FLAG = TRUE)` |
 
-```text
-On-Time Delivery Rate
-=
-On-Time Eligible Shipments
-/
-Eligible Delivered Shipments
-× 100
-```
+### Shipment Performance Surface
 
-Eligible shipment: promised and actual delivery dates exist, shipment is not cancelled, and it belongs to the requested period.
+| # | Metric | Expression |
+|---|--------|------------|
+| M03 | On-Time Delivery Rate | `COUNT_IF(ON_TIME_FLAG = TRUE) / NULLIF(COUNT_IF(DELIVERY_ELIGIBLE_FLAG = TRUE), 0)` |
+| M04 | Avg Delivery Delay Days | `AVG(CASE WHEN DELIVERY_ELIGIBLE_FLAG = TRUE THEN DELIVERY_DELAY_DAYS END)` |
 
-**Grain:** Shipment.
+### Production Performance Surface
 
-## 5. M02 — Late Shipment Count
+| # | Metric | Expression |
+|---|--------|------------|
+| M05 | Production Attainment | `SUM(PRODUCED_QUANTITY) / NULLIF(SUM(PLANNED_QUANTITY), 0)` |
+| M06 | Constrained Production Days | `COUNT_IF(CONSTRAINT_FLAG = TRUE)` |
+| M07 | P104 Exposed Production Days | `COUNT_IF(P104_EXPOSURE_FLAG = TRUE)` |
 
-```text
-COUNT(shipments)
-WHERE actual_delivery_date > promised_date
-```
+### Inventory Position Surface
 
-**Grain:** Shipment.
+| # | Metric | Expression | Semi-Additive |
+|---|--------|------------|---------------|
+| M08 | Total On Hand | `SUM(ON_HAND_QUANTITY)` | Yes — by SNAPSHOT_DATE |
+| M09 | Total Available | `SUM(AVAILABLE_QUANTITY)` | Yes — by SNAPSHOT_DATE |
+| M10 | Parts Below Safety Stock | `COUNT_IF(BELOW_SAFETY_STOCK_FLAG = TRUE)` | Yes — by SNAPSHOT_DATE |
 
-## 6. M03 — Fill Rate
+### Supplier Performance Surface
 
-```text
-Fill Rate
-=
-SUM(fulfilled_quantity)
-/
-SUM(ordered_quantity)
-× 100
-```
+| # | Metric | Expression |
+|---|--------|------------|
+| M11 | Defect Rate | `SUM(DEFECTIVE_QUANTITY) / NULLIF(SUM(INSPECTED_QUANTITY), 0)` |
+| M12 | Rejection Rate | `SUM(REJECTED_QUANTITY) / NULLIF(SUM(RECEIVED_QUANTITY), 0)` |
+
+## 4. Metric Details
+
+### M01 — Fulfillment Rate
+
+**Surface:** CUSTOMER_FULFILLMENT
 
 **Grain:** Order Line.
 
-Do not calculate after an uncontrolled one-to-many shipment join.
+Ratio of fulfilled to ordered quantity. Returns NULL when ordered quantity is zero.
 
-## 7. M04 — Average Supplier Lead Time
+### M02 — Order Lines with Fulfillment Gaps
 
-**Definition:** Average elapsed time from purchase-order line creation to actual receipt for eligible completed supplier commitments.
+**Surface:** CUSTOMER_FULFILLMENT
 
-```text
-AVG(DATEDIFF('day', order_date, receipt_date))
-```
+**Grain:** Order Line.
 
-**Grain:** Eligible receipt / PO-line fulfillment event.
+Count of order lines where unfulfilled quantity exists (FULFILLMENT_GAP_FLAG = TRUE).
 
-This is a relationship metric between PO Line and Supply Receipt.
+### M03 — On-Time Delivery Rate
 
-## 8. M05 — Supplier Inbound On-Time Rate
+**Surface:** SHIPMENT_PERFORMANCE
 
-```text
-Supplier Inbound On-Time Rate
-=
-On-Time Supply Receipts
-/
-Eligible Supply Receipts
-× 100
-```
+**Grain:** Shipment.
 
-On-time: `receipt_date <= promised_receipt_date`.
+Ratio of on-time eligible shipments to all eligible delivered shipments. Eligible means DELIVERY_ELIGIBLE_FLAG = TRUE (promised and actual delivery dates exist, shipment is not cancelled). On-time means ON_TIME_FLAG = TRUE (actual delivery on or before promised date).
 
-**Grain:** Supply Receipt.
+Never include in-transit or cancelled shipments in the denominator.
 
-## 9. M06 — Supplier Defect Rate
+### M04 — Avg Delivery Delay Days
 
-```text
-Supplier Defect Rate
-=
-SUM(defective_quantity)
-/
-SUM(inspected_quantity)
-× 100
-```
+**Surface:** SHIPMENT_PERFORMANCE
 
-**Grain:** Quality Inspection.
+**Grain:** Shipment (eligible delivered only).
 
-## 10. M07 — Inventory Coverage Days
+Average DELIVERY_DELAY_DAYS for eligible delivered shipments. Non-eligible shipments are excluded via CASE expression.
 
-```text
-Inventory Coverage Days
-=
-Available Inventory
-/
-Average Daily Demand
-```
+### M05 — Production Attainment
+
+**Surface:** PRODUCTION_PERFORMANCE
+
+**Grain:** Plant × Product × Production Date.
+
+Ratio of actual to planned production. Returns NULL when planned quantity is zero.
+
+### M06 — Constrained Production Days
+
+**Surface:** PRODUCTION_PERFORMANCE
+
+**Grain:** Plant × Product × Production Date.
+
+Count of production-days where CONSTRAINT_FLAG = TRUE.
+
+### M07 — P104 Exposed Production Days
+
+**Surface:** PRODUCTION_PERFORMANCE
+
+**Grain:** Plant × Product × Production Date.
+
+Count of production-days where the product's BOM includes Part P104. This indicates BOM dependency only — it does NOT prove P104 caused any production disruption.
+
+### M08 — Total On Hand
+
+**Surface:** INVENTORY_POSITION
 
 **Grain:** Part × Plant × Snapshot Date.
 
-Initial demand window: previous 30 days.
+Sum of on-hand quantity. **Semi-additive by SNAPSHOT_DATE:** can be summed across parts and plants for a single date, but must NOT be summed across dates.
 
-If average daily demand is zero, return NULL.
+### M09 — Total Available
 
-Inventory is semi-additive across time. Current inventory uses the latest appropriate snapshot rather than summing daily snapshots.
+**Surface:** INVENTORY_POSITION
 
-## 11. M08 — At-Risk Order Count
+**Grain:** Part × Plant × Snapshot Date.
 
-```text
-COUNT(DISTINCT order_line_id)
-WHERE
-order_status is open
-AND projected_fulfillment_date > promised_date
-```
+Sum of available quantity (on-hand minus reserved). **Semi-additive by SNAPSHOT_DATE.**
 
-**Grain:** Order Line.
+### M10 — Parts Below Safety Stock
 
-The projected date is deterministic and must not be described as an AI-generated forecast.
+**Surface:** INVENTORY_POSITION
 
-## 12. M09 — At-Risk Shipment Count
+**Grain:** Part × Plant × Snapshot Date.
 
-Number of shipments associated with order lines classified as at risk.
+Count of part-plant combinations where available quantity is below safety stock. **Semi-additive by SNAPSHOT_DATE.** For current status, filter to the latest snapshot date.
 
-**Grain:** Shipment.
+### M11 — Defect Rate
 
-## 13. M10 — Confirmed Impacted Customer Count
+**Surface:** SUPPLIER_PERFORMANCE
 
-Number of distinct customers associated with observed delayed shipments.
+**Grain:** Supplier × Part (pre-aggregated).
 
-```text
-COUNT(DISTINCT customer_id)
-```
+Weighted defect rate computed from additive counts (defective quantity / inspected quantity). This is the governed aggregate metric — do NOT average the pre-computed per-row DEFECT_RATE_PCT column across rows.
 
-This represents observed impact.
+### M12 — Rejection Rate
 
-## 14. M11 — At-Risk Customer Count
+**Surface:** SUPPLIER_PERFORMANCE
 
-Number of distinct customers associated with open order lines meeting deterministic ChainLoom risk criteria.
+**Grain:** Supplier × Part (pre-aggregated).
 
-```text
-COUNT(DISTINCT customer_id)
-```
+Weighted rejection rate computed from additive counts (rejected quantity / received quantity). Same aggregation rule as Defect Rate.
 
-This represents potential risk.
+## 5. Pre-Aggregated Supplier Ratios
 
-## 15. Supplier Attribution Rules
+The SUPPLIER_PERFORMANCE surface includes three pre-computed per-row ratio columns:
 
-Capability:
-Supplier → Supplier-Part → Part
+- AVG_RECEIPT_DELAY_DAYS
+- ON_TIME_RECEIPT_PCT
+- DEFECT_RATE_PCT
 
-Commitment:
-Supplier → PO Line → Part → Plant
+These are **non-additive.** Do not SUM or AVG them across rows. For aggregate supplier analysis, use the governed metrics M11 (Defect Rate) and M12 (Rejection Rate), which recompute from additive base quantities.
 
-Actual supply:
-Supplier → Supply Receipt → Part → Plant
+## 6. Supplier Attribution Rules
 
-Capability is not actual supply. Actual supply is not proof of exact downstream causality without material genealogy.
+Capability: Supplier → Supplier-Part → Part
 
-## 16. Inventory Rules
+Commitment: Supplier → PO Line → Part → Plant
 
-Never sum daily inventory snapshots to answer a point-in-time inventory question.
+Actual supply: Supplier → Supply Receipt → Part → Plant
 
-The semantic layer must treat the inventory measure as semi-additive across time.
+Capability is not actual supply. Actual supply is not proof of exact downstream causality without lot/batch genealogy.
 
-## 17. Metric Anti-Patterns
+## 7. Inventory Rules
+
+- Never sum daily inventory snapshots to answer a point-in-time inventory question.
+- The semantic layer treats inventory metrics as semi-additive across time via `NON ADDITIVE BY`.
+- Current inventory requires filtering to the latest snapshot date.
+
+## 8. Metric Anti-Patterns
 
 Avoid:
-- Fact-to-fact fan-out
+- Fact-to-fact fan-out (joining CUSTOMER_FULFILLMENT to SHIPMENT_PERFORMANCE, etc.)
 - Undefined denominators
 - Hidden filters
 - Multiple definitions for one metric
@@ -199,17 +195,10 @@ Avoid:
 - Ambiguous supplier attribution
 - Unsupported causal claims
 - Summing inventory across snapshot dates
+- Averaging pre-aggregated non-additive ratios
 
-## 18. Investigation Outputs
+## 9. Product Risk Signals
 
-Analytical conclusions include:
-- Supplier contribution to OTD deterioration
-- Plant contribution to delay increase
-- Customer impact severity
-- Disruption propagation path
+V_PRODUCT_RISK_SIGNALS exposes product-level rates (FULFILLMENT_RATE, ON_TIME_DELIVERY_RATE, PRODUCTION_ATTAINMENT) as facts, and three risk flags plus RISK_SIGNAL_COUNT as dimensions. These are independently observed indicators from separate analytical surfaces.
 
-These derive from governed metrics and facts.
-
-## 19. Metric Acceptance Criteria
-
-A metric is implementation-ready when definition, formula, eligibility, grain, dimensions, edge cases and test examples are explicit and can be represented consistently in the Semantic View.
+RISK_SIGNAL_COUNT is a simple co-occurrence count (0–3). Co-occurrence is observational only and does NOT imply causality between fulfillment gaps, delivery delays, and production constraints.

@@ -1,7 +1,7 @@
 # ChainLoom — Project Charter
 
-**Status:** Architecture Approved / Model Hardened
-**Version:** 1.1
+**Status:** Implemented and Deployed
+**Version:** 2.0
 **Problem Statement:** Supply Chain Ontology and Governed Conversational Analytics
 
 ## 1. Purpose
@@ -29,7 +29,7 @@ ChainLoom provides a shared, governed understanding of:
 
 The product should answer both direct analytical questions and multi-step questions such as:
 
-> Why did delivery performance decline, what supply-chain path contributed to the deterioration, and which customers are confirmed or potentially at risk?
+> Why did delivery performance decline, what supply-chain dependencies and independently observed signals are associated with the deterioration, and which customers are confirmed or potentially at risk?
 
 ## 3. Core Differentiator
 
@@ -73,22 +73,39 @@ Supplier S017 → delayed supplier commitments / supply receipts → affected pa
 
 The synthetic dataset must contain deterministic ground truth so the scenario can be independently verified.
 
-## 6. Product Modes
+## 6. Current Implementation Status
+
+The following capabilities are deployed and operational:
+
+- **Governed conversational analytics** via Cortex Analyst and Semantic View
+- **Supply-chain Control Tower** with executive KPIs, inventory intelligence, product risk signals
+- **Natural-language investigation console** grounded in the semantic layer
+- **Trust & Governance section** with live posture overview and testable boundary checks
+- **11 verified queries** (Q1–Q10 operational, Q13 product risk signals)
+- **3 governance boundary checks** (causal, attribution, signal interpretation)
+- **Deterministic synthetic scenario** with independently verifiable ground truth
+
+Investigation and impact analysis are handled through Cortex Analyst's governed analytics rather than through a separate Cortex Agent orchestration layer.
+
+## 7. Product Modes
 
 ### Governed Analytics
-- What is our OTD?
-- What is OTD by supplier?
-- Which plant has the highest shipment delay rate?
-- What is the fill rate?
+- What is the fulfillment rate by customer segment?
+- What is the on-time delivery rate by carrier?
+- Which parts are below safety stock?
+- Which suppliers have the highest defect rate?
 
 ### Investigation
-- Why did OTD decline?
-- Which supplier or plant contributed most?
-- Which customers are confirmed impacted?
-- Which customers are at risk?
-- Which alternate suppliers can provide an affected part?
+- Which products show multiple independent risk signals?
+- What is the production attainment by plant?
+- Which products depend on Part P104?
 
-## 7. Trust Principles
+### Governance Boundary Checks
+- Can P104 shortage be proven as the cause of production constraints?
+- Can supplier delay be proven as the cause of late shipments?
+- Can multiple risk signals be combined without inventing causality?
+
+## 8. Trust Principles
 
 ChainLoom distinguishes:
 - Observed facts
@@ -99,7 +116,7 @@ ChainLoom distinguishes:
 
 The MVP does not claim exact receipt-to-shipment causality because it does not implement lot/material genealogy.
 
-## 8. Success Criteria
+## 9. Success Criteria
 
 1. Ontology represented in Snowflake.
 2. Metrics have authoritative definitions.
@@ -110,7 +127,7 @@ The MVP does not claim exact receipt-to-shipment causality because it does not i
 7. A judge can understand the product through a short reliable demo.
 8. Repository and Snowflake implementation are reproducible.
 
-## 9. Delivery Philosophy
+## 10. Delivery Philosophy
 
 - Correctness over feature count
 - Current Snowflake capabilities

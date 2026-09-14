@@ -1,116 +1,115 @@
 # ChainLoom
 
-> Governed conversational intelligence for supply-chain ontology, analytics and impact analysis.
+> Governed supply-chain intelligence built on Snowflake.
 
-ChainLoom is a Snowflake-native hackathon project for the **Supply Chain Ontology and Governed Conversational Analytics** problem statement.
+**Problem Statement:** Supply Chain Ontology and Governed Conversational Analytics
 
-## The problem
+---
 
-Supply-chain data is scattered across ERP, logistics, supplier and operational systems. Definitions are inconsistent, relationships are difficult to traverse, and the same natural-language question can produce different answers across teams.
+## What ChainLoom Does
 
-## Our approach
+ChainLoom is a Snowflake-native supply-chain Control Tower that connects fragmented supply-chain data through a governed semantic layer, enabling natural-language analytics with explicit analytical boundaries.
 
-ChainLoom creates a governed supply-chain ontology and semantic layer connecting:
+Users can ask questions like:
 
-```text
-Supplier → Part → Product → Plant
-                         ↓
-                 Inventory / Production
-                         ↓
-                    Customer Order
-                         ↓
-                      Shipment
-                         ↓
-                      Customer
-```
+- *Which products currently show multiple risk signals?*
+- *What is the on-time delivery rate by carrier?*
+- *Which parts are below safety stock?*
 
-The system combines:
-- Snowflake governed semantic modeling
-- Natural-language analytics
-- Relationship-aware investigation
-- Supply-chain impact analysis
-- Evidence-backed answers
-- Repeatable evaluation
+ChainLoom answers from governed definitions, shows supporting SQL and data, and explicitly states what the model can and cannot establish.
 
-## Product idea
+## Why It Matters
 
-A user can ask:
+Supply-chain data is scattered across ERP, logistics, supplier and operational systems. The same question produces different answers depending on which team runs it. ChainLoom solves this with:
 
-> Why did delivery performance decline, and which customers are affected?
+- **One governed semantic layer** — a single authoritative source for metric definitions, entity relationships and analytical boundaries.
+- **Explicit analytical boundaries** — fact-to-fact joins are blocked, causal inference is prohibited where lot/batch genealogy is unavailable, and inventory is snapshot-aware.
+- **Independent risk signals** — product-level risk is reported as co-occurrence of independently observed threshold breaches, never as a composite score or causal chain.
 
-ChainLoom moves from:
+## Architecture
 
 ```text
-Metric
-  ↓
-Investigation
-  ↓
-Relationship traversal
-  ↓
-Impact
-  ↓
-Evidence
+RAW (16 tables)
+  → CURATED (6 analytical views)
+    → SEMANTIC VIEW (11 logical tables, 12 governed metrics, 14 relationships)
+      → Cortex Analyst REST API
+        → Streamlit Control Tower
 ```
 
-rather than returning an unsupported generic AI explanation.
+**Database:** `CHAINLOOM` with schemas `RAW`, `CURATED`, `SEMANTIC`.
 
-## Initial scenario
+**Semantic View:** `CHAINLOOM.SEMANTIC.CHAINLOOM_ANALYTICS`
 
-A controlled synthetic disruption centered on Supplier S017 demonstrates:
+**Curated Analytical Surfaces:**
+
+| Surface | Grain |
+|---------|-------|
+| V_SUPPLIER_PERFORMANCE | Supplier × Part |
+| V_INVENTORY_POSITION | Part × Plant × Snapshot Date |
+| V_PRODUCTION_PERFORMANCE | Plant × Product × Production Date |
+| V_CUSTOMER_FULFILLMENT | Order Line |
+| V_SHIPMENT_PERFORMANCE | Shipment |
+| V_PRODUCT_RISK_SIGNALS | Product |
+
+Each surface is independently queryable. Fact-to-fact joins are intentionally not modeled to prevent fan-out and cross-grain aggregation errors.
+
+**Verified Queries:** Q1–Q10 (operational), Q13 (product risk signals). Q11–Q12 are governance boundary checks (causal and attribution boundaries).
+
+## Deployment
+
+The Streamlit application runs on Snowflake Container Runtime. It authenticates via OAuth session token and calls the Cortex Analyst REST API against the semantic view.
+
+**Entry point:** `streamlit/Home.py`
+
+**Deployment path:** GitHub → Snowflake Git Repository → Snowflake Container Runtime
+
+## Core Scenario
+
+A controlled synthetic disruption demonstrates governed multi-surface analysis:
 
 ```text
-S017
- ↓
-Delayed purchase-order commitments / supply receipts
- ↓
-P104 availability
- ↓
-PL03 inventory
- ↓
-Production constraint
- ↓
-Order exposure
- ↓
-Shipment delays
- ↓
-Customer impact
+Supplier S017 delays → Part P104 availability → PL03 inventory pressure
+→ Production constraints → Order exposure → Shipment delays → Customer impact
 ```
 
-The scenario is synthetic and deterministic so results can be independently verified.
+The scenario is deterministic so results can be independently verified.
 
-## Repository structure
+## Repository Structure
 
 ```text
 chainloom/
-├── AGENTS.md
-├── README.md
-└── docs/
-    ├── PROJECT_CHARTER.md
-    ├── ONTOLOGY.md
-    ├── METRICS.md
-    └── ARCHITECTURE.md
+├── AGENTS.md                          AI agent instructions
+├── README.md                          This file
+├── docs/
+│   ├── ARCHITECTURE.md                System architecture
+│   ├── METRICS.md                     Governed metric definitions
+│   ├── ONTOLOGY.md                    Supply-chain ontology
+│   ├── PROJECT_CHARTER.md             Project charter and scope
+│   └── demo/
+│       ├── DEMO_SCRIPT.md             Judge-facing demo script
+│       └── QUESTION_CATALOG.md        Verified question catalog
+├── sql/
+│   ├── 01_foundation/                 Database and schema DDL
+│   ├── 02_raw/                        Table DDL, seed data, validation
+│   ├── 03_curated/                    Curated view DDL, validation
+│   └── 04_semantic/                   Semantic view DDL, validation
+└── streamlit/
+    └── Home.py                        Streamlit Control Tower application
 ```
 
-## Current status
+## Governance Approach
 
-**Architecture hardened after independent CoCo review.**
+1. **No unsupported fact-to-fact joins.** Each analytical surface is queried independently.
+2. **Inventory is semi-additive.** Snapshot quantities must not be summed across dates.
+3. **No causal inference.** Supplier-to-customer causality cannot be established without lot/batch genealogy.
+4. **Missing values are preserved.** Unavailable metrics display as "—", never silently converted to zero.
+5. **Risk signals are independent observations.** RISK_SIGNAL_COUNT counts threshold breaches; it is not a weighted or composite score.
+6. **AI does not invent formulas.** All metric definitions originate from the governed semantic layer.
 
-Next stages:
-1. Physical data model
-2. Synthetic data
-3. Curated layer
-4. Semantic View
-5. Verified questions and evaluation
-6. Investigation workflow
-7. Streamlit product
-8. Finalist hardening
-
-## Development principles
+## Development Principles
 
 - Correctness over feature count.
-- Current Snowflake capabilities.
+- Current Snowflake GA capabilities.
 - Explicit business definitions and grain.
 - Deterministic synthetic scenarios.
 - Evidence over unsupported AI claims.
-- Small, testable increments.
-- No secrets in GitHub.
