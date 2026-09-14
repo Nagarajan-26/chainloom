@@ -830,20 +830,46 @@ for i, sg in enumerate(suggestions):
             st.session_state["_suggestion_version"] += 1
             st.rerun()
 
-question = st.text_input(
-    "Ask a question about your supply chain",
-    value=st.session_state["_suggestion_text"],
-    placeholder="e.g. What is the fulfillment rate by customer segment?",
-    key=f"analyst_input_{st.session_state['_suggestion_version']}",
-    label_visibility="collapsed",
-)
+# Use a form so pressing Enter in the question field submits the investigation.
+with st.form(key="analyst_form", clear_on_submit=False):
+    input_col, action_col = st.columns([5, 1])
+    with input_col:
+        question = st.text_input(
+            "Ask a question about your supply chain",
+            value=st.session_state["_suggestion_text"],
+            placeholder="e.g. What is the fulfillment rate by customer segment?",
+            key=f"analyst_input_{st.session_state['_suggestion_version']}",
+            label_visibility="collapsed",
+        )
+    with action_col:
+        submitted = st.form_submit_button(
+            "Investigate",
+            type="primary",
+            use_container_width=True,
+        )
 
 # Once the widget is initialized with the suggestion, retain what the user
 # types in the normal widget state; the versioned key only changes on a new
 # suggestion selection.
 st.session_state["_suggestion_text"] = question
 
-if st.button("Investigate", type="primary", key="analyst_ask") and question.strip():
+# Reset only the investigation workspace; the dashboard/data remain unchanged.
+reset_col = st.columns([5, 1])[1]
+with reset_col:
+    reset_investigation = st.button(
+        "↻ Reset Investigation",
+        key="reset_investigation",
+        use_container_width=True,
+    )
+
+if reset_investigation:
+    st.session_state.analyst_history = []
+    st.session_state.analyst_results = []
+    st.session_state["_suggestion_text"] = ""
+    st.session_state["_suggestion_version"] += 1
+    st.rerun()
+
+if submitted and question.strip():
     with st.spinner("Consulting Cortex Analyst..."):
         try:
             raw_resp = call_analyst(question.strip(), st.session_state.analyst_history)
