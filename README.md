@@ -6,6 +6,28 @@
 
 ---
 
+### Supply Chain Intelligence Control Tower
+
+ChainLoom turns fragmented supply-chain data into governed,
+evidence-backed conversational investigation using Snowflake,
+Cortex Analyst, Semantic Views and Streamlit.
+
+## Architecture
+
+ChainLoom follows a Snowflake-native flow from business question
+to governed analytical result.
+
+![ChainLoom Architecture](assets/architecture/chainloom-architecture.png)
+
+## What ChainLoom Demonstrates
+
+- **See** what requires attention across supply-chain signals.
+- **Investigate** using natural language grounded in governed semantics.
+- **Verify** answers through generated SQL and evidence.
+- **Respect boundaries** when available data cannot establish causality.
+
+...
+
 ## What ChainLoom Does
 
 ChainLoom is a Snowflake-native supply-chain Control Tower that connects fragmented supply-chain data through a governed semantic layer, enabling natural-language analytics with explicit analytical boundaries.
@@ -93,6 +115,8 @@ chainloom/
 │   ├── 02_raw/                        Table DDL, seed data, validation
 │   ├── 03_curated/                    Curated view DDL, validation
 │   └── 04_semantic/                   Semantic view DDL, validation
+├── assets/
+│   ├── architecture/                  Architecture diagram describes Chainloom
 └── streamlit/
     └── Home.py                        Streamlit Control Tower application
 ```
