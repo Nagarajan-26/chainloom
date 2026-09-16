@@ -90,11 +90,19 @@ The Streamlit application runs on Snowflake Container Runtime. It authenticates 
 A controlled synthetic disruption demonstrates governed multi-surface analysis:
 
 ```text
-Supplier S017 delays → Part P104 availability → PL03 inventory pressure
-→ Production constraints → Order exposure → Shipment delays → Customer impact
+Primary dependency path represented in the deterministic synthetic dataset:
+
+Supplier S017
+→ Part P104 availability
+→ PL03 inventory pressure
+→ Production constraints
+→ Order exposure
+→ Shipment delays
+→ Customer impact
 ```
 
-The scenario is deterministic so results can be independently verified.
+These are observed dependencies and co-occurring signals in the synthetic
+scenario, not proof of end-to-end causality.
 
 ## Repository Structure
 
