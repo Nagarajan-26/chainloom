@@ -484,6 +484,25 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystem
     .m-cell { flex: 1 1 30%; }
     .pulse-grid { grid-template-columns: 1fr 1fr; }
 }
+/* Suggested question buttons: wrap long labels instead of truncating. */
+.st-key-suggestion_buttons [data-testid="stButton"] button {
+    height: auto !important;
+    min-height: 3.0rem;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    line-height: 1.25;
+    padding: 0.55rem 0.65rem;
+}
+.st-key-suggestion_buttons [data-testid="stButton"] button p {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+}
+.boundary-state.ready { background: #F1F5F9; color: #475569; border-color: #CBD5E1; }
+.boundary-state.success { background: #EFF6FF; color: #1D4ED8; border-color: #BFDBFE; }
+.boundary-state.warning { background: #FFFBEB; color: #92400E; border-color: #FDE68A; }
+.boundary-state.error { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; }
 </style>""", unsafe_allow_html=True)
 
 
@@ -823,13 +842,14 @@ if "_suggestion_text" not in st.session_state:
 if "_suggestion_version" not in st.session_state:
     st.session_state["_suggestion_version"] = 0
 
-sg_cols = st.columns(len(suggestions))
-for i, sg in enumerate(suggestions):
-    with sg_cols[i]:
-        if st.button(sg, key=f"sg_{i}", use_container_width=True):
-            st.session_state["_suggestion_text"] = sg
-            st.session_state["_suggestion_version"] += 1
-            st.rerun()
+with st.container(key="suggestion_buttons"):
+    sg_cols = st.columns(len(suggestions))
+    for i, sg in enumerate(suggestions):
+        with sg_cols[i]:
+            if st.button(sg, key=f"sg_{i}", use_container_width=True):
+                st.session_state["_suggestion_text"] = sg
+                st.session_state["_suggestion_version"] += 1
+                st.rerun()
 
 # Use a form so pressing Enter in the question field submits the investigation.
 with st.form(key="analyst_form", clear_on_submit=False):
@@ -1074,14 +1094,22 @@ challenges = [
     },
 ]
 
+# Persist each challenge's latest execution outcome so the card reflects reality.
+if "_challenge_status" not in st.session_state:
+    st.session_state["_challenge_status"] = {}
+if "_challenge_results" not in st.session_state:
+    st.session_state["_challenge_results"] = {}
+
 st.markdown('<div class="inv-section-label">Boundary checks</div>', unsafe_allow_html=True)
 ch_cols = st.columns(3, gap="medium")
 for i, ch in enumerate(challenges):
     with ch_cols[i]:
+        current_status = st.session_state["_challenge_status"].get(i, ("READY TO TEST", "ready"))
+        state_label, state_class = current_status
         st.markdown(
             f'<div class="boundary-card">'
             f'<div class="boundary-head"><span class="boundary-type">{ch["badge"]}</span>'
-            f'<span class="boundary-state">{ch["state"]}</span></div>'
+            f'<span class="boundary-state {state_class}">{state_label}</span></div>'
             f'<div class="boundary-q">{ch["label"]}</div>'
             f'<div class="boundary-meta">Test the governed boundary against Cortex Analyst.</div>'
             f'</div>',
@@ -1090,14 +1118,13 @@ for i, ch in enumerate(challenges):
         if st.button("Test Boundary", key=f"ch_{i}", use_container_width=True):
             st.session_state[f"_run_challenge_{i}"] = True
 
-# Render a selected governance challenge using the same Question → Finding → Results
-# pattern as Ask ChainLoom, then append the explicit can/cannot boundary.
+# Execute selected checks, persist their result, and refresh the cards with the true outcome.
 for i, ch in enumerate(challenges):
     if st.session_state.get(f"_run_challenge_{i}"):
         st.session_state[f"_run_challenge_{i}"] = False
-
-        with st.spinner("Running governance boundary check..."):
-            try:
+        st.session_state["_challenge_status"][i] = ("RUNNING...", "warning")
+        try:
+            with st.spinner("Running governance boundary check..."):
                 raw = call_analyst(ch["question"])
                 parsed = parse_analyst_response(raw)
                 execution_status, df, execution_message = run_analyst_sql(parsed["sql"])
@@ -1109,25 +1136,35 @@ for i, ch in enumerate(challenges):
                     "execution_status": execution_status,
                     "execution_message": execution_message,
                 }
-
                 if execution_status == "SUCCESS":
-                    status_label = "QUERY EXECUTED — GOVERNANCE REVIEW"
+                    card_status = ("EXECUTED — REVIEW", "success")
                 elif execution_status == "NO_ROWS":
-                    status_label = "EXECUTED — NO MATCHING DATA"
+                    card_status = ("EXECUTED — NO ROWS", "warning")
                 elif execution_status == "NO_SQL":
-                    status_label = "SQL NOT GENERATED"
+                    card_status = ("NO SQL GENERATED", "warning")
                 else:
-                    status_label = "QUERY EXECUTION FAILED"
-                st.markdown(
-                    f'<div class="gov-state {ch["state_cls"]}">{status_label}</div>',
-                    unsafe_allow_html=True,
-                )
-                render_governed_result(
-                    entry,
-                    governance={"can": ch["can"], "cannot": ch["cannot"]},
-                )
-            except Exception as e:
-                st.error(f"Cortex Analyst error: {e}")
+                    card_status = ("EXECUTION FAILED", "error")
+
+                st.session_state["_challenge_status"][i] = card_status
+                st.session_state["_challenge_results"][i] = entry
+        except Exception as e:
+            st.session_state["_challenge_status"][i] = ("ANALYST ERROR", "error")
+            st.session_state["_challenge_results"][i] = {"error": str(e)}
+        st.rerun()
+
+# Show the latest result beneath its card after the status has been refreshed.
+for i, ch in enumerate(challenges):
+    result = st.session_state["_challenge_results"].get(i)
+    if not result:
+        continue
+    st.markdown(f"**{ch['badge']} — latest test result**")
+    if "error" in result:
+        st.error(f"Cortex Analyst error: {result['error']}")
+        continue
+    render_governed_result(
+        result,
+        governance={"can": ch["can"], "cannot": ch["cannot"]},
+    )
 
 # Permanent governance proof points — concise and reviewer-friendly.
 with st.expander("Governance controls · 6 active", expanded=False):
