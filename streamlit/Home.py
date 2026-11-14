@@ -1276,6 +1276,7 @@ if reset_investigation:
     # are deliberately untouched.
     st.session_state["_challenge_status"] = {}
     st.session_state["_challenge_results"] = {}
+    st.session_state["_challenge_result_order"] = []
     for _i in range(3):
         st.session_state[f"_run_challenge_{_i}"] = False
     st.rerun()
@@ -1493,6 +1494,8 @@ if "_challenge_status" not in st.session_state:
     st.session_state["_challenge_status"] = {}
 if "_challenge_results" not in st.session_state:
     st.session_state["_challenge_results"] = {}
+if "_challenge_result_order" not in st.session_state:
+    st.session_state["_challenge_result_order"] = []
 
 st.markdown('<div class="inv-section-label">Boundary checks</div>', unsafe_allow_html=True)
 ch_cols = st.columns(3, gap="medium")
@@ -1544,10 +1547,18 @@ for i, ch in enumerate(challenges):
         except Exception as e:
             st.session_state["_challenge_status"][i] = ("ANALYST ERROR", "error")
             st.session_state["_challenge_results"][i] = {"error": str(e)}
+
+        # Maintain explicit completion order so the newest boundary result is
+        # always rendered first, even when the same check is run more than once.
+        result_order = st.session_state["_challenge_result_order"]
+        if i in result_order:
+            result_order.remove(i)
+        result_order.append(i)
         st.rerun()
 
-# Show the latest result beneath its card after the status has been refreshed.
-for i, ch in enumerate(challenges):
+# Show boundary results newest-first (same convention as Ask ChainLoom).
+for i in reversed(st.session_state["_challenge_result_order"]):
+    ch = challenges[i]
     result = st.session_state["_challenge_results"].get(i)
     if not result:
         continue
