@@ -713,6 +713,104 @@ if st.session_state["chainloom_theme"] == "Dark":
       .stRadio label, .stRadio p { color:var(--cl-muted) !important; }
     </style>""", unsafe_allow_html=True)
 
+# Final refinement: restore the original six-column governance summary and harmonize tables.
+st.markdown("""<style>
+/* Trust & Governance summary: calm six-column strip, not coloured status tags. */
+.gov-overview {
+  display:grid !important; grid-template-columns:repeat(6,minmax(0,1fr)) !important;
+  gap:0 !important; padding:.65rem !important; margin:.65rem 0 1rem !important;
+  border-radius:18px !important; overflow:hidden;
+  background:#FFFFFF !important; border:1px solid #DCE5F0 !important;
+}
+.gov-metric { padding:.55rem .65rem !important; border-right:1px solid #E8EEF5 !important; min-width:0; }
+.gov-metric:last-child { border-right:0 !important; }
+.gov-kicker { color:#91A1B8 !important; font-size:.68rem !important; font-weight:750 !important; letter-spacing:.055em !important; }
+.gov-value,.gov-value.ok,.gov-value.lock { color:#1D2B42 !important; font-size:.92rem !important; font-weight:800 !important; margin-top:.25rem !important; }
+.gov-badges { display:flex !important; flex-wrap:wrap !important; gap:.45rem !important; }
+.gb,.gb:nth-child(n) { background:#F3F6FA !important; color:#53647B !important; border:1px solid #DFE6EF !important; border-radius:8px !important; box-shadow:none !important; }
+
+/* Consistent table hierarchy: clear header band, readable labels, quiet row dividers. */
+.pt-table,.pulse-table { border-collapse:separate !important; border-spacing:0 !important; }
+.pt-table thead th,.pulse-table thead th {
+  background:#F2F6FB !important; color:#52647D !important;
+  font-size:.68rem !important; font-weight:800 !important; letter-spacing:.065em !important;
+  padding:.7rem .65rem !important; border-bottom:1px solid #DCE5F0 !important;
+  vertical-align:middle !important;
+}
+.pt-table tbody td,.pulse-table tbody td {
+  padding:.62rem .65rem !important; border-bottom:1px solid #EDF1F6 !important;
+}
+.pt-table tbody tr:last-child td,.pulse-table tbody tr:last-child td { border-bottom:0 !important; }
+
+/* Native Streamlit expanders and SQL panels: remove the default white-on-dark mismatch. */
+[data-testid="stExpander"] { border:1px solid #DCE5F0 !important; border-radius:12px !important; overflow:hidden; }
+[data-testid="stExpander"] summary,[data-testid="stExpander"] [data-testid="stExpanderToggleIcon"] {
+  color:#33465F !important;
+}
+[data-testid="stExpander"] summary { background:#F4F7FB !important; padding:.72rem .9rem !important; }
+[data-testid="stCodeBlock"] { border:1px solid #DCE5F0 !important; border-radius:10px !important; overflow:hidden; }
+[data-testid="stCodeBlock"] pre { background:#F7F9FC !important; color:#24364E !important; }
+
+/* Dark-mode surfaces include native widgets, tables, expanders, and code. */
+body:has(.stApp) .stApp:has([data-testid="stMain"]) { color-scheme:light; }
+</style>""", unsafe_allow_html=True)
+
+if st.session_state.get("chainloom_theme") == "Dark":
+    st.markdown("""<style>
+      .gov-overview { background:#111C2E !important; border-color:#2A3B53 !important; }
+      .gov-metric { border-right-color:#2A3B53 !important; }
+      .gov-kicker { color:#9EADC2 !important; }
+      .gov-value,.gov-value.ok,.gov-value.lock { color:#E6EDF7 !important; }
+      .gb,.gb:nth-child(n) { background:#1A293D !important; color:#C3D0E1 !important; border-color:#30445F !important; }
+
+      .pt-table thead th,.pulse-table thead th {
+        background:#1B2A40 !important; color:#D6E1EF !important;
+        border-bottom-color:#344963 !important;
+      }
+      .pt-table tbody td,.pulse-table tbody td {
+        background:#111C2E !important; color:#D8E2EF !important;
+        border-bottom-color:#26364D !important;
+      }
+      .pt-prod,.pt-pct,.pulse-share { color:#E6EDF7 !important; }
+      .pt-miss { background:#1A293D !important; color:#AAB9CC !important; border-color:#344963 !important; }
+
+      [data-testid="stExpander"] {
+        background:#111C2E !important; border-color:#30445F !important;
+      }
+      [data-testid="stExpander"] details,[data-testid="stExpander"] details > summary,
+      [data-testid="stExpander"] summary {
+        background:#17263B !important; color:#E6EDF7 !important;
+      }
+      [data-testid="stExpander"] summary p,[data-testid="stExpander"] summary span,
+      [data-testid="stExpander"] summary svg { color:#D8E3F1 !important; fill:#D8E3F1 !important; }
+      [data-testid="stExpander"] [data-testid="stMarkdownContainer"],
+      [data-testid="stExpander"] [data-testid="stMarkdownContainer"] p,
+      [data-testid="stExpander"] label { color:#C5D2E2 !important; }
+
+      [data-testid="stCodeBlock"],[data-testid="stCodeBlock"] > div,
+      [data-testid="stCodeBlock"] pre,[data-testid="stCodeBlock"] code {
+        background:#0D1727 !important; color:#D8E5F5 !important;
+        border-color:#30445F !important;
+      }
+      [data-testid="stCodeBlock"] pre { padding:1rem !important; }
+      [data-testid="stDataFrame"] {
+        background:#111C2E !important; border:1px solid #30445F !important;
+        border-radius:12px !important; overflow:hidden !important; filter:none !important;
+      }
+      [data-testid="stDataFrame"] canvas { color-scheme:dark !important; }
+      [data-testid="stDataFrame"] [role="columnheader"] {
+        background:#1B2A40 !important; color:#D6E1EF !important;
+        border-color:#344963 !important;
+      }
+      [data-testid="stDataFrame"] [role="gridcell"] {
+        background:#111C2E !important; color:#D8E2EF !important;
+        border-color:#26364D !important;
+      }
+      .stAlert { background:#17263B !important; border-color:#344963 !important; }
+      .stAlert p,.stAlert span { color:#D8E3F1 !important; }
+    </style>""", unsafe_allow_html=True)
+
+
 # Theme switch sits in the application header and persists across Streamlit reruns.
 _theme_spacer, _theme_control = st.columns([8, 2])
 with _theme_control:
@@ -1230,7 +1328,12 @@ def render_governed_result(entry, governance=None):
         st.info(execution_message or "Query executed successfully but returned no matching rows.")
     elif entry.get("df") is not None:
         st.markdown('<div class="inv-section-label">Results</div>', unsafe_allow_html=True)
-        st.dataframe(entry["df"], use_container_width=True, hide_index=True)
+        st.dataframe(
+            entry["df"],
+            use_container_width=True,
+            hide_index=True,
+            theme="dark" if st.session_state.get("chainloom_theme") == "Dark" else "light",
+        )
 
     if parsed["warnings"]:
         with st.expander(f"Analyst diagnostics · {len(parsed['warnings'])}", expanded=False):
