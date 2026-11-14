@@ -633,11 +633,29 @@ st.markdown("""<style>
 .cl-mark .node.n2 { animation-delay:.35s; } .cl-mark .node.n3 { animation-delay:.7s; } .cl-mark .node.n4 { animation-delay:1.05s; }
 @keyframes cl-mark-float { 0%,100% { transform:translateY(0) rotate(0); } 50% { transform:translateY(-3px) rotate(4deg); } }
 @keyframes cl-node-pulse { 0%,100% { box-shadow:0 0 0 2px rgba(41,181,232,.10); } 50% { box-shadow:0 0 0 6px rgba(41,181,232,.04),0 0 13px rgba(41,181,232,.45); } }
+/* Give the brand mark and live-data indicator a clear inset from the header edges. */
+.cl-brand { margin:0 0 1.35rem !important; padding:1rem 1.1rem !important; border-radius:16px !important; gap:1rem; }
+.cl-brand-left { gap:20px !important; padding-left:4px; }
+.cl-mark { margin:0 4px 0 2px; }
+.cl-brand-right { padding-right:4px; }
+.cl-live { padding:7px 11px !important; border-radius:8px !important; }
 /* Rich, linked surfaces and clearer section hierarchy. */
 .surface,.pri-surface,.ai-console,.inv-card,.tc,.pt-surface,.gov-overview,.boundary-card { border-radius:18px !important; box-shadow:0 8px 26px rgba(22,43,74,.07) !important; }
 .sec-label { font-size:.82rem !important; font-weight:800 !important; letter-spacing:.10em !important; color:#53647D !important; }
 .st-key-suggestion_buttons [data-testid="stButton"] button { min-height:4.1rem !important; border-radius:14px !important; border:1px solid #D7E1EF !important; background:linear-gradient(145deg,#FFFFFF,#F3F7FC) !important; color:#23344D !important; box-shadow:0 5px 16px rgba(29,54,89,.07); font-weight:650 !important; white-space:normal !important; }
 .st-key-suggestion_buttons [data-testid="stButton"] button:hover { border-color:#65A8DC !important; background:#EDF6FF !important; transform:translateY(-2px); }
+
+/* Six Trust & Governance proof points: distinct control families, not six identical green pills. */
+.gov-badges { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.65rem !important; }
+.gb { display:flex !important; align-items:center; min-height:54px; padding:.7rem .85rem !important; border-radius:12px !important; font-size:.78rem !important; font-weight:700 !important; line-height:1.35; box-shadow:0 4px 14px rgba(20,40,70,.06); }
+.gb:nth-child(1) { background:#EAF3FF !important; color:#245A9B !important; border:1px solid #BBD5F5 !important; }
+.gb:nth-child(2) { background:#F1ECFF !important; color:#6243A8 !important; border:1px solid #D5C8F5 !important; }
+.gb:nth-child(3) { background:#E7F8F4 !important; color:#087A65 !important; border:1px solid #B8E7DA !important; }
+.gb:nth-child(4) { background:#FFF3E5 !important; color:#9A5B0A !important; border:1px solid #F2D2A6 !important; }
+.gb:nth-child(5) { background:#FDECEF !important; color:#A52B43 !important; border:1px solid #F3C2CC !important; }
+.gb:nth-child(6) { background:#EAF5F7 !important; color:#176A7A !important; border:1px solid #B9DDE3 !important; }
+@media (max-width:800px) { .gov-badges { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
 /* Dark theme: explicit foreground/background pairs for all custom content. */
 </style>""", unsafe_allow_html=True)
 
@@ -661,6 +679,38 @@ if st.session_state["chainloom_theme"] == "Dark":
       .st-key-suggestion_buttons [data-testid="stButton"] button:hover { background:#203B5A !important; border-color:#78B8F4 !important; }
       .surface,.pri-surface,.ai-console,.inv-card,.tc,.pt-surface,.gov-overview,.boundary-card { box-shadow:0 10px 28px rgba(0,0,0,.20) !important; }
       .cl-mark .node { box-shadow:0 0 0 3px rgba(41,181,232,.15); }
+      /* Ensure every custom panel and its nested text uses the dark palette. */
+      .stApp, .stAppViewContainer, [data-testid="stMain"], [data-testid="stMainBlockContainer"] { background:var(--cl-bg) !important; color:var(--cl-text) !important; }
+      .stApp [data-testid="stMarkdownContainer"] p, .stApp [data-testid="stMarkdownContainer"] li,
+      .stApp [data-testid="stMarkdownContainer"] strong, .stApp [data-testid="stMarkdownContainer"] em,
+      .stApp .stCaption, .stApp small { color:var(--cl-muted) !important; }
+      .pri-met strong, .pri-why, .pri-gov, .pulse-table td, .pt-table td, .pt-pct,
+      .inv-q, .inv-tag, .ai-title, .ai-hdr, .tc-q, .gov-value, .gov-kicker,
+      .boundary-q, .boundary-type, .boundary-meta { color:var(--cl-text) !important; }
+      .pri-why { color:#F2C36F !important; }
+      .pri-surface, .surface, .pulse-cell, .ai-console, .inv-card, .tc, .pt-surface,
+      .gov-overview, .boundary-card { background:var(--cl-panel) !important; border-color:var(--cl-border) !important; }
+      .pulse-table th, .pt-table th { color:#A7B5C8 !important; border-color:var(--cl-border) !important; }
+      .pt-table td, .pulse-table td { border-color:#26364D !important; }
+      .tc-badge.causal { background:#3A2028 !important; color:#FF9AA4 !important; border-color:#75404A !important; }
+      .tc-badge.attrib { background:#3A2B16 !important; color:#F6C66D !important; border-color:#73582D !important; }
+      .tc-badge.signals { background:#12372D !important; color:#72D6A8 !important; border-color:#286B55 !important; }
+      .gov-metric { border-color:var(--cl-border) !important; }
+      .gov-kicker { color:#A7B5C8 !important; }
+      .gb:nth-child(1) { background:#172F4D !important; color:#A9CEFF !important; border-color:#31577F !important; }
+      .gb:nth-child(2) { background:#2A2145 !important; color:#CBB9FF !important; border-color:#57477F !important; }
+      .gb:nth-child(3) { background:#12372F !important; color:#83E0C4 !important; border-color:#28685B !important; }
+      .gb:nth-child(4) { background:#3A2B16 !important; color:#F6C66D !important; border-color:#73582D !important; }
+      .gb:nth-child(5) { background:#3A2028 !important; color:#FF9AA4 !important; border-color:#75404A !important; }
+      .gb:nth-child(6) { background:#17343D !important; color:#91D6E2 !important; border-color:#356775 !important; }
+      .cl-brand { margin:0 0 1.35rem !important; padding:.95rem 1rem 1rem !important; border:1px solid var(--cl-border) !important; border-radius:16px !important; background:var(--cl-panel) !important; gap:1rem; }
+      .cl-brand-left { gap:20px !important; padding-left:4px; }
+      .cl-mark { margin:0 4px 0 2px; }
+      .cl-brand-right { padding-right:4px; }
+      .cl-live { padding:7px 11px !important; border-radius:8px !important; }
+      [data-testid="stExpander"] summary, [data-testid="stExpander"] summary p { color:var(--cl-text) !important; }
+      [data-testid="stDataFrame"] { background:var(--cl-panel) !important; }
+      .stRadio label, .stRadio p { color:var(--cl-muted) !important; }
     </style>""", unsafe_allow_html=True)
 
 # Theme switch sits in the application header and persists across Streamlit reruns.
@@ -1052,10 +1102,19 @@ with reset_col:
     )
 
 if reset_investigation:
+    # Clear the Ask ChainLoom conversation and its rendered results.
     st.session_state.analyst_history = []
     st.session_state.analyst_results = []
     st.session_state["_suggestion_text"] = ""
     st.session_state["_suggestion_version"] += 1
+
+    # Clear all three Boundary checks as part of the same investigation reset.
+    # Keep this scoped to investigation state: dashboard data, theme, and caches
+    # are deliberately untouched.
+    st.session_state["_challenge_status"] = {}
+    st.session_state["_challenge_results"] = {}
+    for _i in range(3):
+        st.session_state[f"_run_challenge_{_i}"] = False
     st.rerun()
 
 if submitted and question.strip():
@@ -1335,7 +1394,7 @@ for i, ch in enumerate(challenges):
     )
 
 # Permanent governance proof points — concise and reviewer-friendly.
-with st.expander("Governance controls · 6 active", expanded=False):
+with st.expander("Governance controls · 6 active", expanded=True):
     st.markdown("""
     <div class="gov-badges">
         <span class="gb">✓ Snowflake Semantic View</span>
