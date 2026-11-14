@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import os
+import html
 import pandas as pd
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -373,6 +374,16 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystem
     letter-spacing: 0.08em; color: #94A3B8; margin: 0.5rem 0 0.25rem 0;
 }
 
+/* ── Evidence trace ─────────────────────────────────────── */
+.evidence-strip { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.55rem; margin:.45rem 0 .75rem; }
+.evidence-item { min-width:0; padding:.62rem .72rem; border:1px solid #DCE5EF; border-radius:10px; background:linear-gradient(145deg,#F8FAFD,#FFFFFF); }
+.evidence-label { display:block; color:#7B8CA3; font-size:.56rem; font-weight:750; letter-spacing:.09em; text-transform:uppercase; margin-bottom:.22rem; }
+.evidence-value { display:block; color:#1E293B; font-size:.76rem; font-weight:750; overflow-wrap:anywhere; }
+.evidence-value.ok { color:#087A5B; }
+.evidence-value.warn { color:#A66A12; }
+.evidence-value.fail { color:#B42336; }
+@media(max-width:760px) { .evidence-strip { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
 /* ── Trust cards ────────────────────────────────────────── */
 .tc {
     background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px;
@@ -696,6 +707,12 @@ if st.session_state["chainloom_theme"] == "Dark":
       .tc-badge.attrib { background:#3A2B16 !important; color:#F6C66D !important; border-color:#73582D !important; }
       .tc-badge.signals { background:#12372D !important; color:#72D6A8 !important; border-color:#286B55 !important; }
       .gov-metric { border-color:var(--cl-border) !important; }
+      .evidence-item { background:linear-gradient(145deg,#17263A,#132033) !important; border-color:#304963 !important; }
+      .evidence-label { color:#9FB0C5 !important; }
+      .evidence-value { color:#E5EDF7 !important; }
+      .evidence-value.ok { color:#83E0C4 !important; }
+      .evidence-value.warn { color:#F6CA78 !important; }
+      .evidence-value.fail { color:#FF9DA5 !important; }
       .gov-kicker { color:#A7B5C8 !important; }
       .gb:nth-child(1) { background:#172F4D !important; color:#A9CEFF !important; border-color:#31577F !important; }
       .gb:nth-child(2) { background:#2A2145 !important; color:#CBB9FF !important; border-color:#57477F !important; }
@@ -1379,12 +1396,35 @@ def render_governed_result(entry, governance=None):
     st.markdown('<div class="inv-section-label">Finding</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="finding-surface">{finding}</div>', unsafe_allow_html=True)
 
+    # Compact evidence trace: expose execution facts without implying policy compliance.
+    execution_status = entry.get("execution_status", "SUCCESS" if entry.get("df") is not None else "NO_SQL")
+    execution_labels = {
+        "SUCCESS": ("EXECUTED", "ok"),
+        "NO_ROWS": ("EXECUTED · NO ROWS", "warn"),
+        "NO_SQL": ("NO SQL GENERATED", "warn"),
+        "EXECUTION_FAILED": ("EXECUTION FAILED", "fail"),
+    }
+    execution_label, execution_class = execution_labels.get(execution_status, (str(execution_status).replace("_", " "), "warn"))
+    result_df = entry.get("df")
+    rows_label = f"{len(result_df):,}" if result_df is not None else "Not available"
+    sql_label = "GENERATED" if parsed.get("sql") else "NOT GENERATED"
+    request_id = parsed.get("request_id") or "Not provided"
+    request_short = request_id if len(request_id) <= 18 else f"{request_id[:8]}…{request_id[-6:]}"
+    evidence_html = (
+        '<div class="evidence-strip" aria-label="Investigation evidence trace">'
+        f'<div class="evidence-item"><span class="evidence-label">Execution</span><span class="evidence-value {execution_class}">{html.escape(execution_label)}</span></div>'
+        f'<div class="evidence-item"><span class="evidence-label">Rows returned</span><span class="evidence-value">{html.escape(rows_label)}</span></div>'
+        f'<div class="evidence-item"><span class="evidence-label">SQL statement</span><span class="evidence-value">{html.escape(sql_label)}</span></div>'
+        f'<div class="evidence-item"><span class="evidence-label">Cortex request</span><span class="evidence-value" title="{html.escape(request_id, quote=True)}">{html.escape(request_short)}</span></div>'
+        '</div>'
+    )
+    st.markdown(evidence_html, unsafe_allow_html=True)
+
     analyst_context = clean_analyst_context(parsed.get("text", ""))
     if analyst_context and analyst_context.lower() != finding.lower():
         with st.expander("Analyst interpretation", expanded=False):
             st.markdown(analyst_context)
 
-    execution_status = entry.get("execution_status", "SUCCESS" if entry.get("df") is not None else "NO_SQL")
     execution_message = entry.get("execution_message", "")
     if execution_status == "EXECUTION_FAILED":
         st.error(f"Query execution failed: {execution_message}")
