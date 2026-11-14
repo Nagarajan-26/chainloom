@@ -119,7 +119,7 @@ def load_risk_signals():
     ).to_pandas()
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=30)
 def load_executive_kpis():
     ff = session.sql(
         "SELECT ROUND(100.0*SUM(FULFILLED_QUANTITY)/NULLIF(SUM(ORDERED_QUANTITY),0),1) AS V "
@@ -181,6 +181,10 @@ priority_df = priority_df.sort_values(
     ascending=[False, True, True, True],
 )
 
+
+# Theme preference is kept in Streamlit session state across reruns.
+if "chainloom_theme" not in st.session_state:
+    st.session_state["chainloom_theme"] = "Light"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CSS
@@ -503,8 +507,111 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystem
 .boundary-state.success { background: #EFF6FF; color: #1D4ED8; border-color: #BFDBFE; }
 .boundary-state.warning { background: #FFFBEB; color: #92400E; border-color: #FDE68A; }
 .boundary-state.error { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; }
+
+/* ── ChainLoom premium theme system ───────────────────────────────────── */
+:root {
+  --cl-bg: #F3F6FB; --cl-panel: #FFFFFF; --cl-panel-soft: #F8FAFD;
+  --cl-text: #142238; --cl-muted: #64748B; --cl-subtle: #8795A8;
+  --cl-border: #DCE4EF; --cl-grid: #E9EEF5; --cl-blue: #2563EB;
+  --cl-blue-soft: #EFF6FF; --cl-green: #087F5B; --cl-green-bg: #E8F7F0;
+  --cl-amber: #A65B08; --cl-amber-bg: #FFF5E5; --cl-red: #B42332; --cl-red-bg: #FFF0F1;
+  --cl-shadow: 0 8px 28px rgba(21, 40, 72, .07);
+}
+.stApp { background: var(--cl-bg) !important; color: var(--cl-text) !important; }
+.block-container { max-width: 1500px; padding-top: 1.25rem; padding-bottom: 2rem; }
+.cl-brand, .surface, .pri-surface, .pulse-cell, .ai-console, .inv-card, .tc,
+.pt-surface, .gov-overview, .boundary-card, .m-cell {
+  background: var(--cl-panel) !important; border-color: var(--cl-border) !important;
+  box-shadow: var(--cl-shadow);
+}
+.cl-brand-title, .m-cell .mv, .pri-prod, .pulse-n, .posture-main, .ai-title,
+.inv-q, .pt-prod, .gov-value, .boundary-q { color: var(--cl-text) !important; }
+.cl-brand-name, .cl-brand-subtitle, .cl-live, .m-cell .ml, .m-cell .md, .sec-label,
+.pri-sigs, .pri-met, .pulse-l, .posture-label, .posture-share, .pulse-table th,
+.pulse-table td, .pulse-ts, .inv-note, .ai-sub, .inv-section-label, .tc-q,
+.boundary-type, .boundary-meta, .cl-footer { color: var(--cl-muted) !important; }
+.surface, .pri-surface, .pulse-cell, .ai-console, .inv-card, .tc, .pt-surface,
+.gov-overview, .boundary-card { border-radius: 14px !important; }
+.m-cell { padding: 1rem .85rem !important; }
+.m-cell .ml { font-size: .76rem !important; letter-spacing: .055em; white-space: normal !important; }
+.m-cell .mv { font-size: 1.85rem !important; font-weight: 750 !important; }
+.m-cell .md { font-size: .76rem !important; }
+.sec-label { font-size: .78rem !important; letter-spacing: .11em; font-weight: 750 !important; }
+.cl-brand-title { font-size: 1.55rem !important; }
+.cl-brand-name { font-size: .75rem !important; }
+.cl-brand-subtitle { font-size: .85rem !important; }
+.pri-prod { font-size: 1.2rem !important; }
+.pri-sigs, .pri-met, .pri-why, .pri-gov, .pulse-l, .posture-label, .inv-note,
+.inv-exception, .ai-sub, .tc-q, .boundary-q, .boundary-meta { font-size: .88rem !important; line-height: 1.5 !important; }
+.pulse-n { font-size: 1.45rem !important; }
+.posture-main { font-size: 1.65rem !important; }
+.pt-table th, .pulse-table th, .gov-kicker { font-size: .72rem !important; }
+.pt-table td, .pulse-table td, .gov-value { font-size: .88rem !important; }
+.boundary-state, .gov-state, .pri-badge, .tc-badge { font-size: .68rem !important; padding: 4px 8px !important; }
+.ai-hdr, .inv-tag, .inv-section-label { font-size: .75rem !important; }
+.ai-title { font-size: 1.35rem !important; }
+.stButton > button, .stFormSubmitButton > button { min-height: 2.8rem; border-radius: 10px; font-weight: 650; }
+.stTextInput input { min-height: 2.8rem; border-radius: 10px; }
+.stDataFrame, [data-testid="stDataFrame"] { border: 1px solid var(--cl-border); border-radius: 12px; }
+.stExpander { border: 1px solid var(--cl-border); border-radius: 12px; }
+.st-key-suggestion_buttons [data-testid="stButton"] button { min-height: 4rem; white-space: normal !important; overflow-wrap: anywhere; line-height: 1.35; }
+.boundary-state.ready { background: var(--cl-panel-soft); color: var(--cl-muted); border-color: var(--cl-border); }
+.boundary-state.success { background: var(--cl-green-bg); color: var(--cl-green); border-color: #9AD9BD; }
+.boundary-state.warning { background: var(--cl-amber-bg); color: var(--cl-amber); border-color: #F2D39B; }
+.boundary-state.error { background: var(--cl-red-bg); color: var(--cl-red); border-color: #F2B8BE; }
+.gov-state.verified, .can-block, .gb { background: var(--cl-green-bg) !important; color: var(--cl-green) !important; border-color: #9AD9BD !important; }
+.boundary-state.enforced { background: var(--cl-green-bg) !important; color: var(--cl-green) !important; border-color: #9AD9BD !important; }
+.gov-state.enforced { background: var(--cl-green-bg) !important; color: var(--cl-green) !important; border-color: #9AD9BD !important; }
+.cannot-block { background: var(--cl-red-bg) !important; color: var(--cl-red) !important; border-color: #F2B8BE !important; }
+
+/* Dark palette: all custom surfaces, typography, controls and status chips move together. */
 </style>""", unsafe_allow_html=True)
 
+if st.session_state["chainloom_theme"] == "Dark":
+    st.markdown("""<style>
+      :root { --cl-bg:#0B1220; --cl-panel:#111C2E; --cl-panel-soft:#172438; --cl-text:#E8EEF7;
+        --cl-muted:#A7B5C8; --cl-subtle:#8293AA; --cl-border:#26364D; --cl-grid:#26364D;
+        --cl-blue:#7CB8FF; --cl-blue-soft:#152B46; --cl-green:#72D6A8; --cl-green-bg:#12372D;
+        --cl-amber:#F6C66D; --cl-amber-bg:#3A2B16; --cl-red:#FF9AA4; --cl-red-bg:#3A2028;
+        --cl-shadow:0 10px 30px rgba(0,0,0,.22); }
+      .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] { background:var(--cl-bg) !important; color:var(--cl-text) !important; }
+      .stApp p, .stApp label, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp li, .stApp span { color:inherit; }
+      .cl-brand, .surface, .pri-surface, .pulse-cell, .ai-console, .inv-card, .tc, .pt-surface, .gov-overview, .boundary-card, .m-cell { background:var(--cl-panel) !important; border-color:var(--cl-border) !important; }
+      .cl-brand-title, .m-cell .mv, .pri-prod, .pulse-n, .posture-main, .ai-title, .inv-q, .pt-prod, .gov-value, .boundary-q { color:var(--cl-text) !important; }
+      .cl-brand-name, .cl-brand-subtitle, .cl-live, .m-cell .ml, .m-cell .md, .sec-label, .pri-sigs, .pri-met, .pulse-l, .posture-label, .posture-share, .pulse-table th, .pulse-table td, .pulse-ts, .inv-note, .ai-sub, .inv-section-label, .tc-q, .boundary-type, .boundary-meta, .cl-footer { color:var(--cl-muted) !important; }
+      .pulse-table td, .pt-table td { border-color:var(--cl-border) !important; }
+      .pri-gov, .inv-sep { border-color:var(--cl-border) !important; color:var(--cl-muted) !important; }
+      .finding-surface { background:#172B43 !important; color:#D8E8FA !important; border-color:#5797D4 !important; }
+      .inv-exception { background:var(--cl-amber-bg) !important; color:var(--cl-amber) !important; border-color:#73582D !important; }
+      .pri-badge.high, .pt-state.high, .pt-sig.high { background:#3A2028 !important; color:#FF9AA4 !important; border-color:#75404A !important; }
+      .pri-badge.watch, .pt-state.watch, .pt-sig.watch { background:#3A2B16 !important; color:#F6C66D !important; border-color:#73582D !important; }
+      .pt-state.ok, .pt-sig.ok { background:#12372D !important; color:#72D6A8 !important; }
+      .gov-state.verified, .gov-state.enforced, .can-block, .gb { background:var(--cl-green-bg) !important; color:var(--cl-green) !important; border-color:#286B55 !important; }
+      .cannot-block { background:var(--cl-red-bg) !important; color:var(--cl-red) !important; border-color:#75404A !important; }
+      .boundary-state.ready { background:var(--cl-panel-soft) !important; color:var(--cl-muted) !important; border-color:var(--cl-border) !important; }
+      .boundary-state.success { background:var(--cl-green-bg) !important; color:var(--cl-green) !important; border-color:#286B55 !important; }
+      .boundary-state.warning { background:var(--cl-amber-bg) !important; color:var(--cl-amber) !important; border-color:#73582D !important; }
+      .boundary-state.error { background:var(--cl-red-bg) !important; color:var(--cl-red) !important; border-color:#75404A !important; }
+      .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] > div { background:#172438 !important; color:var(--cl-text) !important; border-color:var(--cl-border) !important; }
+      .stButton > button, .stFormSubmitButton > button { background:#1B2B42; color:#E8EEF7; border-color:#344963; }
+      .stButton > button:hover { border-color:#7CB8FF; color:#FFFFFF; }
+      [data-testid="stExpander"] { background:var(--cl-panel) !important; border-color:var(--cl-border) !important; }
+      [data-testid="stDataFrame"] { filter: brightness(.88) contrast(1.04); }
+      [data-testid="stMetric"] { background:var(--cl-panel); border:1px solid var(--cl-border); border-radius:12px; padding:12px; }
+      .stAlert { background:var(--cl-panel) !important; color:var(--cl-text) !important; }
+    </style>""", unsafe_allow_html=True)
+
+
+
+
+# Theme switch sits in the application header and persists across Streamlit reruns.
+_theme_spacer, _theme_control = st.columns([8, 2])
+with _theme_control:
+    st.radio(
+        "Appearance", ["Light", "Dark"],
+        horizontal=True, key="chainloom_theme",
+        label_visibility="collapsed",
+    )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 3. BRAND HEADER
@@ -534,10 +641,12 @@ st.markdown(f"""
 # ══════════════════════════════════════════════════════════════════════════════
 # 4. EXECUTIVE KPI STRIP
 # ══════════════════════════════════════════════════════════════════════════════
-ff_c = "g" if fulfillment_pct and fulfillment_pct >= 90 else ("w" if fulfillment_pct and fulfillment_pct >= 80 else "d")
-ff_v = f"{fulfillment_pct}%" if fulfillment_pct is not None else "\u2014"
-otd_c = "g" if otd_pct and otd_pct >= 85 else ("w" if otd_pct and otd_pct >= 70 else "d")
-otd_v = f"{otd_pct}%" if otd_pct is not None else "\u2014"
+fulfillment_pct = float(fulfillment_pct) if fulfillment_pct is not None and pd.notna(fulfillment_pct) else None
+otd_pct = float(otd_pct) if otd_pct is not None and pd.notna(otd_pct) else None
+ff_c = "g" if fulfillment_pct is not None and fulfillment_pct >= 90 else ("w" if fulfillment_pct is not None and fulfillment_pct >= 80 else "d")
+ff_v = f"{fulfillment_pct:.1f}%" if fulfillment_pct is not None else "Unavailable"
+otd_c = "g" if otd_pct is not None and otd_pct >= 85 else ("w" if otd_pct is not None and otd_pct >= 70 else "d")
+otd_v = f"{otd_pct:.1f}%" if otd_pct is not None else "Unavailable"
 
 st.markdown(f"""
 <div class="m-strip">
@@ -1043,7 +1152,7 @@ for entry in reversed(st.session_state.analyst_results):
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("")
 st.markdown('<div class="sec-label">Trust &amp; Governance</div>', unsafe_allow_html=True)
-st.caption("Live governance posture for the analytical model, followed by three boundary checks that can be tested on demand.")
+st.caption("Configured governance policies are shown in green. Each test's execution outcome is displayed separately; successful SQL execution alone does not prove causation or policy compliance.")
 
 # Enterprise posture: persistent, scannable controls rather than a static demo-style block.
 gov_overview = [
@@ -1069,7 +1178,7 @@ challenges = [
         "question": "For August 2026, which products with Part P104 BOM exposure also had constrained production days, and what can the data establish about causation?",
         "can": "BOM exposure and production constraints can be independently reported.",
         "cannot": "Causation cannot be established without a valid linkage between the inventory and production surfaces.",
-        "state": "READY TO TEST",
+        "state": "BOUNDARY ENFORCED",
         "state_cls": "enforced",
     },
     {
@@ -1079,7 +1188,7 @@ challenges = [
         "question": "Which supplier delivery delays directly caused late shipments to our Strategic customers?",
         "can": "Supplier and shipment delays can be independently observed.",
         "cannot": "Direct supplier-to-customer causation cannot be established because lot/batch genealogy is unavailable.",
-        "state": "READY TO TEST",
+        "state": "BOUNDARY ENFORCED",
         "state_cls": "enforced",
     },
     {
@@ -1089,7 +1198,7 @@ challenges = [
         "question": "Which products currently show multiple independent supply-chain risk signals across fulfillment, delivery, and production?",
         "can": "Independent threshold breaches can be reported at product level.",
         "cannot": "Co-occurrence does not justify a weighted or causal risk score.",
-        "state": "READY TO TEST",
+        "state": "POLICY ACTIVE",
         "state_cls": "verified",
     },
 ]
@@ -1104,7 +1213,7 @@ st.markdown('<div class="inv-section-label">Boundary checks</div>', unsafe_allow
 ch_cols = st.columns(3, gap="medium")
 for i, ch in enumerate(challenges):
     with ch_cols[i]:
-        current_status = st.session_state["_challenge_status"].get(i, ("READY TO TEST", "ready"))
+        current_status = st.session_state["_challenge_status"].get(i, (ch["state"], ch["state_cls"]))
         state_label, state_class = current_status
         st.markdown(
             f'<div class="boundary-card">'
@@ -1137,7 +1246,7 @@ for i, ch in enumerate(challenges):
                     "execution_message": execution_message,
                 }
                 if execution_status == "SUCCESS":
-                    card_status = ("EXECUTED — REVIEW", "success")
+                    card_status = ("CHECK COMPLETE · REVIEW", "success")
                 elif execution_status == "NO_ROWS":
                     card_status = ("EXECUTED — NO ROWS", "warning")
                 elif execution_status == "NO_SQL":
