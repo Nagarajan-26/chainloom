@@ -604,6 +604,65 @@ if st.session_state["chainloom_theme"] == "Dark":
 
 
 
+# Final visual polish: preserve the original risk colour language while elevating the KPI tiles.
+st.markdown("""<style>
+/* Five headline KPI tiles: distinct semantic colours, not generic white boxes. */
+.m-strip { display:grid !important; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px !important; background:transparent !important; overflow:visible !important; margin:0 0 1.35rem !important; }
+.m-cell { position:relative; overflow:hidden; min-height:122px; border:1px solid transparent !important; border-radius:18px !important; padding:1.05rem 1.05rem .95rem !important; text-align:left !important; box-shadow:0 10px 26px rgba(25,45,78,.10) !important; transition:transform .22s ease, box-shadow .22s ease; }
+.m-cell:hover { transform:translateY(-4px); box-shadow:0 16px 32px rgba(25,45,78,.16) !important; }
+.m-cell:before { content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--tile-accent); }
+.m-cell:after { content:""; position:absolute; width:112px; height:112px; border-radius:50%; right:-42px; top:-48px; background:var(--tile-glow); }
+.m-cell:nth-child(1) { --tile-accent:#E5484D; --tile-glow:rgba(229,72,77,.12); background:linear-gradient(135deg,#FFF4F3,#FFFFFF) !important; border-color:#F7D2D0 !important; }
+.m-cell:nth-child(2) { --tile-accent:#D99018; --tile-glow:rgba(217,144,24,.14); background:linear-gradient(135deg,#FFF8E9,#FFFFFF) !important; border-color:#F4E1B9 !important; }
+.m-cell:nth-child(3) { --tile-accent:#7657D5; --tile-glow:rgba(118,87,213,.13); background:linear-gradient(135deg,#F5F1FF,#FFFFFF) !important; border-color:#DED5FA !important; }
+.m-cell:nth-child(4) { --tile-accent:#078B73; --tile-glow:rgba(7,139,115,.13); background:linear-gradient(135deg,#EAF9F5,#FFFFFF) !important; border-color:#C7EDE3 !important; }
+.m-cell:nth-child(5) { --tile-accent:#2878D0; --tile-glow:rgba(40,120,208,.13); background:linear-gradient(135deg,#EDF5FF,#FFFFFF) !important; border-color:#D0E3FA !important; }
+.m-cell .ml,.m-cell .mv,.m-cell .md { position:relative; z-index:1; text-align:left !important; }
+.m-cell .ml { color:#43536B !important; font-size:.78rem !important; font-weight:750 !important; letter-spacing:.025em !important; line-height:1.35; white-space:normal !important; }
+.m-cell .mv { color:#17263D !important; font-size:2rem !important; font-weight:800 !important; letter-spacing:-.04em; margin:.35rem 0 .18rem; }
+.m-cell:nth-child(1) .mv { color:#C7353B !important; }
+.m-cell:nth-child(2) .mv { color:#A96808 !important; }
+.m-cell:nth-child(3) .mv { color:#6244BE !important; }
+.m-cell:nth-child(4) .mv { color:#087A65 !important; }
+.m-cell:nth-child(5) .mv { color:#2168B7 !important; }
+.m-cell .md { color:#66758B !important; font-size:.76rem !important; }
+.cl-info { display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; margin-left:3px; border-radius:50%; border:1px solid currentColor; font-size:10px; font-weight:800; line-height:1; opacity:.78; cursor:help; vertical-align:1px; }
+/* Branded animated ChainLoom mark. Subtle motion only; no distracting page animation. */
+.cl-mark { filter:drop-shadow(0 3px 7px rgba(41,181,232,.22)); animation:cl-mark-float 3.8s ease-in-out infinite; }
+.cl-mark .node { box-shadow:0 0 0 3px rgba(41,181,232,.10); animation:cl-node-pulse 2.8s ease-in-out infinite; }
+.cl-mark .node.n2 { animation-delay:.35s; } .cl-mark .node.n3 { animation-delay:.7s; } .cl-mark .node.n4 { animation-delay:1.05s; }
+@keyframes cl-mark-float { 0%,100% { transform:translateY(0) rotate(0); } 50% { transform:translateY(-3px) rotate(4deg); } }
+@keyframes cl-node-pulse { 0%,100% { box-shadow:0 0 0 2px rgba(41,181,232,.10); } 50% { box-shadow:0 0 0 6px rgba(41,181,232,.04),0 0 13px rgba(41,181,232,.45); } }
+/* Rich, linked surfaces and clearer section hierarchy. */
+.surface,.pri-surface,.ai-console,.inv-card,.tc,.pt-surface,.gov-overview,.boundary-card { border-radius:18px !important; box-shadow:0 8px 26px rgba(22,43,74,.07) !important; }
+.sec-label { font-size:.82rem !important; font-weight:800 !important; letter-spacing:.10em !important; color:#53647D !important; }
+.st-key-suggestion_buttons [data-testid="stButton"] button { min-height:4.1rem !important; border-radius:14px !important; border:1px solid #D7E1EF !important; background:linear-gradient(145deg,#FFFFFF,#F3F7FC) !important; color:#23344D !important; box-shadow:0 5px 16px rgba(29,54,89,.07); font-weight:650 !important; white-space:normal !important; }
+.st-key-suggestion_buttons [data-testid="stButton"] button:hover { border-color:#65A8DC !important; background:#EDF6FF !important; transform:translateY(-2px); }
+/* Dark theme: explicit foreground/background pairs for all custom content. */
+</style>""", unsafe_allow_html=True)
+
+if st.session_state["chainloom_theme"] == "Dark":
+    st.markdown("""<style>
+      .m-cell:nth-child(1) { background:linear-gradient(135deg,#3B2028,#251B28) !important; border-color:#70404A !important; }
+      .m-cell:nth-child(2) { background:linear-gradient(135deg,#3A2E1D,#282318) !important; border-color:#71582F !important; }
+      .m-cell:nth-child(3) { background:linear-gradient(135deg,#30264C,#211D37) !important; border-color:#57477F !important; }
+      .m-cell:nth-child(4) { background:linear-gradient(135deg,#153A35,#142B2D) !important; border-color:#28685B !important; }
+      .m-cell:nth-child(5) { background:linear-gradient(135deg,#193654,#17283E) !important; border-color:#315D87 !important; }
+      .m-cell .ml { color:#D5DFEC !important; }
+      .m-cell .md { color:#A9B8CB !important; }
+      .m-cell:nth-child(1) .mv { color:#FF9DA5 !important; }
+      .m-cell:nth-child(2) .mv { color:#F6CA78 !important; }
+      .m-cell:nth-child(3) .mv { color:#C5B4FF !important; }
+      .m-cell:nth-child(4) .mv { color:#83E0C4 !important; }
+      .m-cell:nth-child(5) .mv { color:#91C8FF !important; }
+      .cl-info { color:#C7D5E7 !important; }
+      .sec-label { color:#B9C8DA !important; }
+      .st-key-suggestion_buttons [data-testid="stButton"] button { background:linear-gradient(145deg,#1A2B42,#152338) !important; color:#E7EEF8 !important; border-color:#344B67 !important; }
+      .st-key-suggestion_buttons [data-testid="stButton"] button:hover { background:#203B5A !important; border-color:#78B8F4 !important; }
+      .surface,.pri-surface,.ai-console,.inv-card,.tc,.pt-surface,.gov-overview,.boundary-card { box-shadow:0 10px 28px rgba(0,0,0,.20) !important; }
+      .cl-mark .node { box-shadow:0 0 0 3px rgba(41,181,232,.15); }
+    </style>""", unsafe_allow_html=True)
+
 # Theme switch sits in the application header and persists across Streamlit reruns.
 _theme_spacer, _theme_control = st.columns([8, 2])
 with _theme_control:
@@ -651,27 +710,27 @@ otd_v = f"{otd_pct:.1f}%" if otd_pct is not None else "Unavailable"
 st.markdown(f"""
 <div class="m-strip">
     <div class="m-cell">
-        <div class="ml">High-Risk Products</div>
+        <div class="ml" title="Products with two or more independently observed risk signals.">High-Risk Products <span class="cl-info">i</span></div>
         <div class="mv{"  d" if high_risk_count > 0 else ""}">{high_risk_count}</div>
         <div class="md">&ge;2 signals</div>
     </div>
     <div class="m-cell">
-        <div class="ml">Watchlist</div>
+        <div class="ml" title="Products with one independently observed risk signal.">Watchlist <span class="cl-info">i</span></div>
         <div class="mv{" w" if watchlist_count > 0 else ""}">{watchlist_count}</div>
         <div class="md">1 signal</div>
     </div>
     <div class="m-cell">
-        <div class="ml">Products Needing Attention</div>
+        <div class="ml" title="High-risk products plus watchlist products. This is a prioritisation count, not a causal score.">Products Needing Attention <span class="cl-info">i</span></div>
         <div class="mv{" d" if attention_count > 0 else ""}">{attention_count}</div>
         <div class="md">of {monitored_count} products</div>
     </div>
     <div class="m-cell">
-        <div class="ml">Network Fulfillment</div>
+        <div class="ml" title="Fulfilled quantity divided by ordered quantity across the available customer fulfillment records.">Network Fulfillment <span class="cl-info">i</span></div>
         <div class="mv {ff_c}">{ff_v}</div>
         <div class="md">all available orders</div>
     </div>
     <div class="m-cell">
-        <div class="ml">On-Time Delivery</div>
+        <div class="ml" title="On-time eligible shipments divided by all eligible shipments.">On-Time Delivery <span class="cl-info">i</span></div>
         <div class="mv {otd_c}">{otd_v}</div>
         <div class="md">eligible shipments</div>
     </div>
