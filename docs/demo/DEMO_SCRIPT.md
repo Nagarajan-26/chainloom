@@ -1,91 +1,47 @@
-# ChainLoom — Demo Script
+# ChainLoom — Finale Pitch & Demo Script
 
-**Audience:** Hackathon judges
-**Duration:** 4–6 minutes
-**Theme:** Governed conversational analytics with explicit analytical boundaries
+**Total:** 15 minutes — 10-minute pitch + 5-minute judge Q&A  
+**Pitch split:** 2-minute story, 5-minute slides, 3-minute live demo
 
----
+## 1. Story — 2 minutes
 
-## Opening (30 seconds)
+ChainLoom is a Snowflake-native supply-chain Control Tower. Supply-chain data is fragmented across procurement, inventory, production, fulfillment and logistics. A natural-language interface alone is not enough: it can produce plausible answers while joining incompatible grains or implying causes that the data cannot prove.
 
-ChainLoom is a Snowflake-native supply-chain Control Tower. It connects fragmented supply-chain data through a governed semantic layer so natural-language questions return consistent, trustworthy answers — and explicitly states what the model can and cannot establish.
+ChainLoom connects these domains through independent curated analytical surfaces and a governed Snowflake Semantic View. Its purpose is not only to answer business questions, but to make the analytical boundaries visible — what the data supports and what it does not.
 
----
+## 2. Slides — 5 minutes
 
-## Step 1 — What needs attention? (45 seconds)
+1. **Problem and solution (1 min):** fragmented supply-chain evidence; one governed analytical experience.
+2. **Architecture (1 min):** RAW → CURATED → SEMANTIC → Streamlit; Snowflake-native components.
+3. **Data model (1 min):** independent analytical surfaces with explicit grains; avoid unsupported fact-to-fact joins and snapshot aggregation.
+4. **Intelligence and governance (1 min):** Semantic View, governed metrics, verified queries, and explicit rules against unsupported causal claims.
+5. **CoCo CLI contribution and value (1 min):** explain the actual development tasks performed with CoCo CLI, with concrete examples from the team's real workflow. Cortex Analyst powers natural-language analytics at runtime; CoCo CLI was the development assistant.
 
-**Show:** The Control Tower dashboard as it loads.
+## 3. Live demo — 3 minutes
 
-Point out the executive KPI strip (Fulfillment Rate, On-Time Delivery, risk counts), the Priority Attention card showing the highest-signal product, and the Network Posture breakdown.
+### Demo A — business question (about 90 seconds)
 
-**Key point:** These are live governed metrics from independent analytical surfaces, not hardcoded values.
+Ask: **Which carriers have the lowest on-time delivery rate?**
 
----
+Show the generated SQL and result. Point out the eligible-shipment denominator and that the query uses the shipment analytical surface.
 
-## Step 2 — Investigate supply-chain risk (60 seconds)
+### Demo B — governance boundary (about 90 seconds)
 
-**Ask ChainLoom:** *Which products currently show multiple risk signals?*
+Use the P104 question for the supported data period:
 
-This triggers Cortex Analyst against the governed semantic view. Show the result table from V_PRODUCT_RISK_SIGNALS.
+**For August 2026, which products with Part P104 BOM exposure also had constrained production days, and what can the data establish about causation?**
 
-**Key point:** Each risk flag (fulfillment, delivery, production) is independently computed from its own analytical surface. RISK_SIGNAL_COUNT counts co-occurrences — it is not a composite score and does not imply causality.
+Show the observed exposure/constraint evidence, then explain that co-occurrence is not proof of causation. The current data does not contain lot/batch genealogy linking a specific shortage to a production event.
 
----
+**Demo safety:** Do not present an empty result or a failed SQL execution as proof that governance blocked a claim. Distinguish successful execution, zero rows, SQL generation failure and execution failure. If the live boundary test is unstable, show the prevalidated result/evidence and explain the limitation honestly.
 
-## Step 3 — Drill into a specific signal (60 seconds)
+## 4. Closing (10–15 seconds, within the allotted sections)
 
-**Ask ChainLoom:** *Which carriers have the lowest on-time delivery rate?*
+ChainLoom demonstrates governed conversational analytics: not just generating answers, but making clear what the underlying evidence can and cannot establish.
 
-Show the generated SQL and results. Point out that the query uses only the SHIPMENT_PERFORMANCE surface with governed metric definitions.
+## Presenter notes
 
-Then ask: *Which parts are currently below safety stock?*
-
-**Key point:** Inventory results are snapshot-aware — the query filters to the latest snapshot date. Quantities are never summed across dates.
-
----
-
-## Step 4 — Evidence and provenance (45 seconds)
-
-Expand the governance metadata on a result:
-- Semantic View name
-- Request ID
-- Generated SQL visible in the "View generated SQL" expander
-
-**Key point:** Every answer traces back to the governed semantic layer. The application does not fabricate evidence.
-
----
-
-## Step 5 — Test the boundaries (90 seconds)
-
-Navigate to the **Trust & Governance** section. Show the live governance posture:
-- Semantic Layer: CONNECTED
-- Verified Queries: 11
-- Fact-to-Fact Joins: BLOCKED
-- Causal Inference: BLOCKED
-- Inventory Grain: SNAPSHOT
-- Missing Values: PRESERVED
-
-**Test Boundary 1 — Causal Boundary:**
-
-Click "Test Boundary" on: *Did Part P104 inventory shortages cause production constraints last month?*
-
-Show the result with the explicit governance interpretation:
-- **Can establish:** BOM exposure and production constraints can be independently reported.
-- **Cannot establish:** Causation cannot be established without a valid linkage between the inventory and production surfaces.
-
-**Test Boundary 2 — Attribution Boundary:**
-
-Click "Test Boundary" on: *Which supplier delivery delays directly caused late shipments to our Strategic customers?*
-
-- **Can establish:** Supplier and shipment delays can be independently observed.
-- **Cannot establish:** Direct supplier-to-customer causation cannot be established because lot/batch genealogy is unavailable.
-
-**Key point:** ChainLoom explicitly refuses unsupported causal claims rather than generating a plausible-sounding but unfounded narrative. This is the core differentiator.
-
----
-
-## Closing (30 seconds)
-
-ChainLoom demonstrates that governed conversational analytics is not just about answering questions — it is about knowing what the data can and cannot establish, and communicating that clearly.
-
-Built entirely on Snowflake: Semantic Views, Cortex Analyst, Container Runtime. No external infrastructure.
+- The synthetic transaction generator covers July 1–August 31, 2026. Avoid relative phrases such as “last month”; name the supported period explicitly.
+- Do not claim that CoCo CLI runs the end-user question. The application calls the Cortex Analyst REST API at runtime.
+- Do not claim P104 caused production constraints. P104 exposure means BOM dependency only.
+- Do not claim supplier delays caused customer shipment delays; lot/batch genealogy is unavailable.

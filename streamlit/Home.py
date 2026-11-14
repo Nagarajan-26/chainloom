@@ -100,14 +100,15 @@ def parse_analyst_response(resp: dict) -> dict:
     return result
 
 
-def run_analyst_sql(sql: str) -> pd.DataFrame | None:
+def run_analyst_sql(sql: str) -> tuple[str, pd.DataFrame | None, str]:
+    """Execute Analyst SQL and preserve the difference between failure and zero rows."""
     if not sql or not sql.strip():
-        return None
+        return "NO_SQL", None, "Cortex Analyst did not generate SQL for this question."
     try:
-        return session.sql(sql).to_pandas()
-    except Exception as e:
-        st.error(f"Query execution error: {e}")
-        return None
+        df = session.sql(sql).to_pandas()
+        return ("NO_ROWS", df, "Query executed successfully but returned no matching rows.") if df.empty else ("SUCCESS", df, "")
+    except Exception as exc:
+        return "EXECUTION_FAILED", None, str(exc)
 
 
 # ── Data loaders ───────────────────────────────────────────────────────────
@@ -885,11 +886,13 @@ if submitted and question.strip():
             st.session_state.analyst_history.append(
                 {"role": "analyst", "content": reply_content}
             )
-            df_result = run_analyst_sql(parsed["sql"]) if parsed["sql"] else None
+            execution_status, df_result, execution_message = run_analyst_sql(parsed["sql"])
             st.session_state.analyst_results.append({
                 "question": question.strip(),
                 "parsed": parsed,
                 "df": df_result,
+                "execution_status": execution_status,
+                "execution_message": execution_message,
             })
         except Exception as e:
             st.error(f"Cortex Analyst error: {e}")
@@ -903,8 +906,10 @@ def build_business_finding(entry):
     """
     df = entry.get("df")
     q = (entry.get("question") or "").lower()
-    if df is None or df.empty:
-        return "The governed query returned no matching records."
+    if df is None:
+        return "The query could not be executed; no business finding is available."
+    if df.empty:
+        return "The query executed successfully but returned no matching records."
 
     n = len(df)
     cols = {str(c).upper(): c for c in df.columns}
@@ -968,11 +973,17 @@ def render_governed_result(entry, governance=None):
         with st.expander("Analyst interpretation", expanded=False):
             st.markdown(analyst_context)
 
-    if entry.get("df") is not None and not entry["df"].empty:
+    execution_status = entry.get("execution_status", "SUCCESS" if entry.get("df") is not None else "NO_SQL")
+    execution_message = entry.get("execution_message", "")
+    if execution_status == "EXECUTION_FAILED":
+        st.error(f"Query execution failed: {execution_message}")
+    elif execution_status == "NO_SQL":
+        st.warning(execution_message or "No SQL was generated for this question.")
+    elif execution_status == "NO_ROWS":
+        st.info(execution_message or "Query executed successfully but returned no matching rows.")
+    elif entry.get("df") is not None:
         st.markdown('<div class="inv-section-label">Results</div>', unsafe_allow_html=True)
         st.dataframe(entry["df"], use_container_width=True, hide_index=True)
-    elif parsed["sql"]:
-        st.caption("Query returned no results.")
 
     if parsed["warnings"]:
         with st.expander(f"Analyst diagnostics · {len(parsed['warnings'])}", expanded=False):
@@ -1035,10 +1046,10 @@ challenges = [
         "badge_cls": "causal",
         "badge": "Causal Boundary",
         "label": "Can P104 shortage be proven as the cause?",
-        "question": "Did Part P104 inventory shortages cause production constraints last month?",
+        "question": "For August 2026, which products with Part P104 BOM exposure also had constrained production days, and what can the data establish about causation?",
         "can": "BOM exposure and production constraints can be independently reported.",
         "cannot": "Causation cannot be established without a valid linkage between the inventory and production surfaces.",
-        "state": "BOUNDARY ENFORCED",
+        "state": "READY TO TEST",
         "state_cls": "enforced",
     },
     {
@@ -1048,7 +1059,7 @@ challenges = [
         "question": "Which supplier delivery delays directly caused late shipments to our Strategic customers?",
         "can": "Supplier and shipment delays can be independently observed.",
         "cannot": "Direct supplier-to-customer causation cannot be established because lot/batch genealogy is unavailable.",
-        "state": "BOUNDARY ENFORCED",
+        "state": "READY TO TEST",
         "state_cls": "enforced",
     },
     {
@@ -1058,7 +1069,7 @@ challenges = [
         "question": "Which products currently show multiple independent supply-chain risk signals across fulfillment, delivery, and production?",
         "can": "Independent threshold breaches can be reported at product level.",
         "cannot": "Co-occurrence does not justify a weighted or causal risk score.",
-        "state": "GOVERNED",
+        "state": "READY TO TEST",
         "state_cls": "verified",
     },
 ]
@@ -1089,16 +1100,26 @@ for i, ch in enumerate(challenges):
             try:
                 raw = call_analyst(ch["question"])
                 parsed = parse_analyst_response(raw)
-                df = run_analyst_sql(parsed["sql"]) if parsed["sql"] else None
+                execution_status, df, execution_message = run_analyst_sql(parsed["sql"])
 
                 entry = {
                     "question": ch["question"],
                     "parsed": parsed,
                     "df": df,
+                    "execution_status": execution_status,
+                    "execution_message": execution_message,
                 }
 
+                if execution_status == "SUCCESS":
+                    status_label = "QUERY EXECUTED — GOVERNANCE REVIEW"
+                elif execution_status == "NO_ROWS":
+                    status_label = "EXECUTED — NO MATCHING DATA"
+                elif execution_status == "NO_SQL":
+                    status_label = "SQL NOT GENERATED"
+                else:
+                    status_label = "QUERY EXECUTION FAILED"
                 st.markdown(
-                    f'<div class="gov-state {ch["state_cls"]}">{ch["state"]}</div>',
+                    f'<div class="gov-state {ch["state_cls"]}">{status_label}</div>',
                     unsafe_allow_html=True,
                 )
                 render_governed_result(
