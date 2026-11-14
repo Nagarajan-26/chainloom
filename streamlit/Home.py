@@ -715,19 +715,33 @@ if st.session_state["chainloom_theme"] == "Dark":
 
 # Final refinement: restore the original six-column governance summary and harmonize tables.
 st.markdown("""<style>
-/* Trust & Governance summary: calm six-column strip, not coloured status tags. */
+/* Six executive governance tiles: restore the original colourful, premium treatment. */
 .gov-overview {
   display:grid !important; grid-template-columns:repeat(6,minmax(0,1fr)) !important;
-  gap:0 !important; padding:.65rem !important; margin:.65rem 0 1rem !important;
-  border-radius:18px !important; overflow:hidden;
-  background:#FFFFFF !important; border:1px solid #DCE5F0 !important;
+  gap:.62rem !important; padding:.15rem 0 !important; margin:.7rem 0 1.1rem !important;
+  background:transparent !important; border:0 !important; overflow:visible !important;
 }
-.gov-metric { padding:.55rem .65rem !important; border-right:1px solid #E8EEF5 !important; min-width:0; }
-.gov-metric:last-child { border-right:0 !important; }
-.gov-kicker { color:#91A1B8 !important; font-size:.68rem !important; font-weight:750 !important; letter-spacing:.055em !important; }
-.gov-value,.gov-value.ok,.gov-value.lock { color:#1D2B42 !important; font-size:.92rem !important; font-weight:800 !important; margin-top:.25rem !important; }
-.gov-badges { display:flex !important; flex-wrap:wrap !important; gap:.45rem !important; }
-.gb,.gb:nth-child(n) { background:#F3F6FA !important; color:#53647B !important; border:1px solid #DFE6EF !important; border-radius:8px !important; box-shadow:none !important; }
+.gov-metric { position:relative; min-width:0; min-height:88px; padding:.9rem .85rem !important;
+  border:1px solid var(--gov-border,#DCE5F0) !important; border-radius:14px !important;
+  background:var(--gov-bg,#F4F7FC) !important; box-shadow:0 7px 18px rgba(25,45,78,.08) !important;
+  transition:transform .18s ease,box-shadow .18s ease; }
+.gov-metric:hover { transform:translateY(-3px); box-shadow:0 12px 24px rgba(25,45,78,.13) !important; }
+.gov-metric:nth-child(1) { --gov-bg:linear-gradient(140deg,#EAF3FF,#F8FBFF); --gov-border:#C9DDF7; --gov-accent:#2878C8; --gov-value:#245F9D; }
+.gov-metric:nth-child(2) { --gov-bg:linear-gradient(140deg,#F0ECFF,#FBFAFF); --gov-border:#D9D0F6; --gov-accent:#7657D5; --gov-value:#6244BE; }
+.gov-metric:nth-child(3) { --gov-bg:linear-gradient(140deg,#E8F7F2,#F8FCFA); --gov-border:#C4E8DA; --gov-accent:#16866D; --gov-value:#087A65; }
+.gov-metric:nth-child(4) { --gov-bg:linear-gradient(140deg,#FFF3E5,#FFFAF4); --gov-border:#F1D9B9; --gov-accent:#C47A18; --gov-value:#9A5B0A; }
+.gov-metric:nth-child(5) { --gov-bg:linear-gradient(140deg,#FDECEF,#FFF9FA); --gov-border:#F0CDD4; --gov-accent:#C24C62; --gov-value:#A52B43; }
+.gov-metric:nth-child(6) { --gov-bg:linear-gradient(140deg,#EAF5F7,#F8FCFD); --gov-border:#C9E2E7; --gov-accent:#27879A; --gov-value:#176A7A; }
+.gov-metric:before { content:""; position:absolute; left:0; top:12px; bottom:12px; width:4px; border-radius:0 4px 4px 0; background:var(--gov-accent); }
+.gov-kicker { color:#72839B !important; font-size:.66rem !important; font-weight:800 !important; letter-spacing:.065em !important; line-height:1.3; }
+.gov-value,.gov-value.ok,.gov-value.lock { color:var(--gov-value) !important; font-size:1.05rem !important; font-weight:850 !important; margin-top:.48rem !important; letter-spacing:.01em; }
+.gov-badges { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:.65rem !important; }
+.gb,.gb:nth-child(n) { display:flex !important; align-items:center; min-height:48px; padding:.72rem .9rem !important;
+  background:linear-gradient(135deg,#E8F7EF,#F5FCF7) !important; color:#176B43 !important;
+  border:1px solid #BFE4CC !important; border-left:4px solid #2C9A61 !important;
+  border-radius:11px !important; box-shadow:0 4px 12px rgba(22,107,67,.07) !important; font-weight:750 !important; }
+@media(max-width:1050px) { .gov-overview { grid-template-columns:repeat(3,minmax(0,1fr)) !important; } }
+@media(max-width:620px) { .gov-overview { grid-template-columns:repeat(2,minmax(0,1fr)) !important; } .gov-badges { grid-template-columns:1fr !important; } }
 
 /* Consistent table hierarchy: clear header band, readable labels, quiet row dividers. */
 .pt-table,.pulse-table { border-collapse:separate !important; border-spacing:0 !important; }
@@ -750,6 +764,18 @@ st.markdown("""<style>
 [data-testid="stExpander"] summary { background:#F4F7FB !important; padding:.72rem .9rem !important; }
 [data-testid="stCodeBlock"] { border:1px solid #DCE5F0 !important; border-radius:10px !important; overflow:hidden; }
 [data-testid="stCodeBlock"] pre { background:#F7F9FC !important; color:#24364E !important; }
+.reason-flow { display:flex; align-items:stretch; gap:.55rem; margin:.65rem 0 .8rem; }
+.reason-node { flex:1 1 0; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:.35rem; padding:.85rem .8rem; border:1px solid #D8E3F0; border-radius:13px; background:linear-gradient(145deg,#F6F9FD,#FFFFFF); box-shadow:0 5px 14px rgba(25,45,78,.06); }
+.reason-node span { color:#7A8BA3; font-size:.59rem; font-weight:850; letter-spacing:.07em; }
+.reason-node strong { color:#243750; font-size:.77rem; line-height:1.35; }
+.reason-node small { color:#64758C; font-size:.67rem; line-height:1.4; }
+.reason-node.curated { border-color:#BFE4D6; background:linear-gradient(145deg,#EFFAF5,#FFFFFF); }
+.reason-node.semantic { border-color:#D4C9F5; background:linear-gradient(145deg,#F5F1FF,#FFFFFF); }
+.reason-node.outcome { border-color:#C7DDF5; background:linear-gradient(145deg,#EEF6FF,#FFFFFF); }
+.reason-arrow { align-self:center; color:#7790AD; font-size:1.25rem; font-weight:800; }
+.reason-guardrails { display:flex; flex-wrap:wrap; gap:.45rem; margin:.1rem 0 1rem; }
+.reason-guardrails span { padding:.35rem .55rem; border:1px solid #BFE4CC; border-radius:999px; background:#EFF9F2; color:#267449; font-size:.65rem; font-weight:750; }
+@media(max-width:760px) { .reason-flow { flex-direction:column; } .reason-arrow { transform:rotate(90deg); } }
 
 /* Dark-mode surfaces include native widgets, tables, expanders, and code. */
 body:has(.stApp) .stApp:has([data-testid="stMain"]) { color-scheme:light; }
@@ -757,11 +783,17 @@ body:has(.stApp) .stApp:has([data-testid="stMain"]) { color-scheme:light; }
 
 if st.session_state.get("chainloom_theme") == "Dark":
     st.markdown("""<style>
-      .gov-overview { background:#111C2E !important; border-color:#2A3B53 !important; }
-      .gov-metric { border-right-color:#2A3B53 !important; }
-      .gov-kicker { color:#9EADC2 !important; }
-      .gov-value,.gov-value.ok,.gov-value.lock { color:#E6EDF7 !important; }
-      .gb,.gb:nth-child(n) { background:#1A293D !important; color:#C3D0E1 !important; border-color:#30445F !important; }
+      .gov-overview { background:transparent !important; border:0 !important; }
+      .gov-metric { background:#142238 !important; border-color:#304963 !important; box-shadow:0 8px 20px rgba(0,0,0,.22) !important; }
+      .gov-metric:nth-child(1) { --gov-value:#9BCBFF; --gov-accent:#4B9BE8; }
+      .gov-metric:nth-child(2) { --gov-value:#C8B8FF; --gov-accent:#9A80F0; }
+      .gov-metric:nth-child(3) { --gov-value:#8BE0C4; --gov-accent:#36B58E; }
+      .gov-metric:nth-child(4) { --gov-value:#FFD18A; --gov-accent:#E4A342; }
+      .gov-metric:nth-child(5) { --gov-value:#FFAAB5; --gov-accent:#E36D82; }
+      .gov-metric:nth-child(6) { --gov-value:#9BDCE8; --gov-accent:#55B5C8; }
+      .gov-kicker { color:#AFC0D5 !important; }
+      .gov-value,.gov-value.ok,.gov-value.lock { color:var(--gov-value) !important; }
+      .gb,.gb:nth-child(n) { background:linear-gradient(135deg,#123A2B,#153526) !important; color:#A7E8BE !important; border-color:#286B49 !important; border-left-color:#48B879 !important; box-shadow:0 5px 14px rgba(0,0,0,.18) !important; }
 
       .pt-table thead th,.pulse-table thead th {
         background:#1B2A40 !important; color:#D6E1EF !important;
@@ -808,6 +840,39 @@ if st.session_state.get("chainloom_theme") == "Dark":
       }
       .stAlert { background:#17263B !important; border-color:#344963 !important; }
       .stAlert p,.stAlert span { color:#D8E3F1 !important; }
+      .reason-node { background:linear-gradient(145deg,#17283F,#132238) !important; border-color:#344B67 !important; }
+      .reason-node span { color:#9DB1CA !important; }
+      .reason-node strong { color:#E5EEF9 !important; }
+      .reason-node small { color:#B5C5D8 !important; }
+      .reason-node.curated { background:linear-gradient(145deg,#15372F,#142A2B) !important; border-color:#286B58 !important; }
+      .reason-node.semantic { background:linear-gradient(145deg,#2A2347,#1D1D37) !important; border-color:#574A80 !important; }
+      .reason-node.outcome { background:linear-gradient(145deg,#193653,#17283F) !important; border-color:#315D87 !important; }
+      .reason-arrow { color:#8EABC9 !important; }
+      .reason-guardrails span { background:#153629 !important; color:#A7E8BE !important; border-color:#286B49 !important; }
+    </style>""", unsafe_allow_html=True)
+
+if st.session_state.get("chainloom_theme") == "Dark":
+    st.markdown("""<style>
+      .gov-overview { background:transparent !important; border:0 !important; }
+      .gov-metric { background:#142238 !important; border-color:#304963 !important; }
+      .gov-metric:nth-child(1) { --gov-value:#9BCBFF; --gov-accent:#4B9BE8; }
+      .gov-metric:nth-child(2) { --gov-value:#C8B8FF; --gov-accent:#9A80F0; }
+      .gov-metric:nth-child(3) { --gov-value:#8BE0C4; --gov-accent:#36B58E; }
+      .gov-metric:nth-child(4) { --gov-value:#FFD18A; --gov-accent:#E4A342; }
+      .gov-metric:nth-child(5) { --gov-value:#FFAAB5; --gov-accent:#E36D82; }
+      .gov-metric:nth-child(6) { --gov-value:#9BDCE8; --gov-accent:#55B5C8; }
+      .gov-kicker { color:#AFC0D5 !important; }
+      .gov-value,.gov-value.ok,.gov-value.lock { color:var(--gov-value) !important; }
+      .gb,.gb:nth-child(n) { background:linear-gradient(135deg,#123A2B,#153526) !important; color:#A7E8BE !important; border-color:#286B49 !important; border-left-color:#48B879 !important; }
+      .reason-node { background:linear-gradient(145deg,#17283F,#132238) !important; border-color:#344B67 !important; }
+      .reason-node span { color:#9DB1CA !important; }
+      .reason-node strong { color:#E5EEF9 !important; }
+      .reason-node small { color:#B5C5D8 !important; }
+      .reason-node.curated { background:linear-gradient(145deg,#15372F,#142A2B) !important; border-color:#286B58 !important; }
+      .reason-node.semantic { background:linear-gradient(145deg,#2A2347,#1D1D37) !important; border-color:#574A80 !important; }
+      .reason-node.outcome { background:linear-gradient(145deg,#193653,#17283F) !important; border-color:#315D87 !important; }
+      .reason-arrow { color:#8EABC9 !important; }
+      .reason-guardrails span { background:#153629 !important; color:#A7E8BE !important; border-color:#286B49 !important; }
     </style>""", unsafe_allow_html=True)
 
 
@@ -1332,7 +1397,6 @@ def render_governed_result(entry, governance=None):
             entry["df"],
             use_container_width=True,
             hide_index=True,
-            theme="dark" if st.session_state.get("chainloom_theme") == "Dark" else "light",
         )
 
     if parsed["warnings"]:
@@ -1511,6 +1575,18 @@ with st.expander("Governance controls · 6 active", expanded=True):
 
 
 with st.expander("How ChainLoom reasons"):
+    st.markdown("""
+<div class="reason-flow" role="img" aria-label="ChainLoom reasoning flow: independent curated analytical surfaces feed a governed semantic view, then verified queries and bounded business findings.">
+  <div class="reason-node source"><span>01 · DATA FOUNDATION</span><strong>RAW SOURCES</strong><small>Orders · Shipments · Production · Inventory · Suppliers</small></div>
+  <div class="reason-arrow">→</div>
+  <div class="reason-node curated"><span>02 · CURATED LAYER</span><strong>5 ANALYTICAL SURFACES</strong><small>Independent grains · Clean business metrics</small></div>
+  <div class="reason-arrow">→</div>
+  <div class="reason-node semantic"><span>03 · GOVERNED SEMANTICS</span><strong>SNOWFLAKE SEMANTIC VIEW</strong><small>Relationships · Metrics · Verified queries</small></div>
+  <div class="reason-arrow">→</div>
+  <div class="reason-node outcome"><span>04 · DECISION SUPPORT</span><strong>CHAINLOOM FINDINGS</strong><small>Evidence · Boundaries · No invented causality</small></div>
+</div>
+<div class="reason-guardrails"><span>✓ Grain-aware joins</span><span>✓ Snapshot-safe inventory</span><span>✓ Missing values preserved</span><span>✓ Causality not assumed</span></div>
+""", unsafe_allow_html=True)
     st.markdown("""
 **Analytical Architecture**
 
